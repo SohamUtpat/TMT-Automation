@@ -1,0 +1,22 @@
+{
+  "name": "playwright-automation",
+  "version": "1.0.0",
+  "description": "GulfTMT Admin Portal - Playwright automation",
+  "main": "index.js",
+  "scripts": {
+    "test": "playwright test",
+    "test:login": "playwright test Admin/Login",
+    "test:dashboard": "playwright test Admin/DashBoard",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "report": "playwright show-report"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@playwright/test": "^1.61.0",
+    "@types/node": "^26.0.0"
+  }
+}
