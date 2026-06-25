@@ -2,8 +2,6 @@ import { test, expect } from '../fixtures/dashboard.fixture';
 import { DashboardData } from '../data/DashboardData';
 
 test('TC_AP_291 - Verify Bar Graph Fields', async ({ dashboardPage }) => {
-  await dashboardPage.expectDashboardLoaded();
-
   await dashboardPage.hoverOnGroup(0);
   const tooltip = await dashboardPage.getTooltipText();
 

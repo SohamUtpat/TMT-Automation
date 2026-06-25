@@ -7,6 +7,7 @@
     "test": "playwright test",
     "test:login": "playwright test Admin/Login",
     "test:dashboard": "playwright test Admin/DashBoard",
+    "test:mobile-users": "playwright test Admin/MobileUsers",
     "test:headed": "playwright test --headed",
     "test:ui": "playwright test --ui",
     "report": "playwright show-report"

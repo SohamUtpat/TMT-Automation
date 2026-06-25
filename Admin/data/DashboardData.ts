@@ -43,5 +43,6 @@ export const DashboardData = {
   emptyGroupName: 'EmptyGroupWithZeroUsers',
 
   mobileUsersPagePath: '/mobile-users',
-  mobileUsersPaginationPattern: /261 items|1-25 of 261/,
+  /** Table pagination format: "1-25 of 261 items" (see TableView showTotal). */
+  mobileUsersPaginationPattern: /of\s*261\s*items/i,
 };

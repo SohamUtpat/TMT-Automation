@@ -1,16 +1,50 @@
-import { test as base } from '@playwright/test';
+import { test as base, type BrowserContext, type Page } from '@playwright/test';
+import path from 'path';
 import { DashboardPage } from '../pages/DashboardPage';
-import { LoginPage } from '../pages/LoginPage';
+
+const authFile = path.join(__dirname, '../../playwright/.auth/admin.json');
 
 type DashboardFixtures = {
   dashboardPage: DashboardPage;
 };
 
-export const test = base.extend<DashboardFixtures>({
-  dashboardPage: async ({ page }, use) => {
-    const login = new LoginPage(page);
-    await login.loginAsAdmin();
-    await use(new DashboardPage(page));
+type WorkerFixtures = {
+  workerContext: BrowserContext;
+  workerPage: Page;
+};
+
+export const test = base.extend<DashboardFixtures, WorkerFixtures>({
+  workerContext: [
+    async ({ browser }, use) => {
+      const context = await browser.newContext({ storageState: authFile });
+      await use(context);
+      await context.close();
+    },
+    { scope: 'worker' },
+  ],
+
+  workerPage: [
+    async ({ workerContext }, use) => {
+      const page = await workerContext.newPage();
+      const dashboardPage = new DashboardPage(page);
+      await dashboardPage.navigateToDashboard();
+      await use(page);
+    },
+    { scope: 'worker' },
+  ],
+
+  page: async ({ workerPage }, use) => {
+    await use(workerPage);
+  },
+
+  dashboardPage: async ({ workerPage }, use) => {
+    const dashboardPage = new DashboardPage(workerPage);
+
+    if (!/\/dashboard(?:\/|$|\?)/.test(workerPage.url())) {
+      await dashboardPage.navigateToDashboard();
+    }
+
+    await use(dashboardPage);
   },
 });
 

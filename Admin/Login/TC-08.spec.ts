@@ -1,10 +1,7 @@
-import { test, expect } from '@playwright/test';
-import { LoginPage } from '../pages/LoginPage';
+import { test, expect } from '../fixtures/login.fixture';
+import { loginData } from '../data/loginData';
 
-test('TC_AP_08 - Invalid Username and Password', async ({ page }) => {
-  const login = new LoginPage(page);
-
-  await login.navigate();
-  await login.login('wronguser', 'wrongpassword');
-  await login.expectInvalidCredentials();
+test('TC_AP_08 - Invalid Username and Password', async ({ loginPage }) => {
+  await loginPage.login(loginData.invalidUser, loginData.invalidPassword);
+  await loginPage.expectInvalidCredentials();
 });

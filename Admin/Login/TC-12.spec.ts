@@ -1,13 +1,8 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/login.fixture';
 import { loginData } from '../data/loginData';
 
-test('TC_AP_12 - Password Eye Icon', async ({ page }) => {
-  await page.goto(loginData.baseUrl);
-
-  const password = page.locator('#password');
-  const eyeIcon = page.locator('.ant-input-suffix, .ant-input-password-icon');
-
-  await password.fill(loginData.validPassword);
-  await eyeIcon.first().click();
-  await expect(password).toHaveAttribute('type', 'text');
+test('TC_AP_12 - Password Eye Icon', async ({ loginPage }) => {
+  await loginPage.password.fill(loginData.validPassword);
+  await loginPage.passwordEyeIcon.first().click();
+  await expect(loginPage.password).toHaveAttribute('type', 'text');
 });

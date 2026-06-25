@@ -1,9 +1,5 @@
-import { test, expect } from '@playwright/test';
-import { loginData } from '../data/loginData';
+import { test, expect } from '../fixtures/login.fixture';
 
-test('TC_AP_13 - Pointer Cursor', async ({ page }) => {
-  await page.goto(loginData.baseUrl);
-
-  const button = page.locator('button.ant-btn-primary');
-  await expect(button).toHaveCSS('cursor', 'pointer');
+test('TC_AP_13 - Pointer Cursor', async ({ loginPage }) => {
+  await expect(loginPage.loginBtn).toHaveCSS('cursor', 'pointer');
 });
