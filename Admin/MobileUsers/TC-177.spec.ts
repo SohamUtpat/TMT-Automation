@@ -5,7 +5,10 @@ test('TC_AP_177 - Verify Minimum Username Length 3', async ({ mobileUsersPage })
   const user = MobileUsersData.buildValidUser({ userName: 'abc' });
 
   await test.step('Create user with 3-character username', async () => {
-    await mobileUsersPage.createMobileUser(user);
+    await mobileUsersPage.clickCreateUser();
+    await mobileUsersPage.fillCreateUserForm(user);
+    await mobileUsersPage.triggerFieldValidation();
+    await mobileUsersPage.submitCreateUser();
   });
 
   await test.step('Verify user appears in listing', async () => {

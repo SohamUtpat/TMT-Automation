@@ -6,7 +6,7 @@ test('TC_AP_182 - Verify Mobile Rejects Invalid Characters', async ({ mobileUser
   await test.step('Submit create form with invalid mobile number', async () => {
     await mobileUsersPage.clickCreateUser();
     await mobileUsersPage.fillCreateUserForm({ phone: TestDataGenerator.generateInvalidPhone() });
-    await mobileUsersPage.submitCreateUser();
+    await mobileUsersPage.submitCreateUser({ waitForApi: false });
   });
 
   await test.step('Verify invalid mobile validation message', async () => {

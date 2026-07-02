@@ -1,8 +1,11 @@
 import { test, expect } from '../fixtures/groups.fixture';
-import { GroupsData } from '../data/GroupsData';
 
 test('TC_AP_155 - Verify Multiple or All Users Can Be Removed From Group', async ({ groupsPage }) => {
-  await groupsPage.openMembersList(GroupsData.groupForMultiMemberRemoval.name);
+  const group = await groupsPage.prepareGroupWithMembersFromApi({
+    excludeHq: true,
+    minUserCount: 2,
+  });
+  await groupsPage.openMembersList(group.name);
 
   const memberCountBefore = await groupsPage.getMembersTotalCount();
   expect(memberCountBefore).toBeGreaterThan(1);

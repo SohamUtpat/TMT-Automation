@@ -5,7 +5,8 @@ test('TC_AP_162 - Verify HQ Group Pre-Assigned On Create', async ({ mobileUsersP
   const user = MobileUsersData.buildValidUser();
   await mobileUsersPage.createMobileUser(user);
 
+  const hqGroup = await mobileUsersPage.getApiHqGroup();
   await mobileUsersPage.searchUsers(user.userName);
   const groups = await mobileUsersPage.getColumnValues('groups');
-  expect(groups.some((g) => g.includes(MobileUsersData.hqGroupCode))).toBe(true);
+  expect(groups.some((g) => g.includes(hqGroup.code) || g.includes(hqGroup.name))).toBe(true);
 });

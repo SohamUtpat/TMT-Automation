@@ -7,7 +7,10 @@ test('TC_AP_173 - Verify Maximum Last Name Length 50', async ({ mobileUsersPage 
   const user = MobileUsersData.buildValidUser({ lastName });
 
   await test.step('Create user with 50-character last name', async () => {
-    await mobileUsersPage.createMobileUser(user);
+    await mobileUsersPage.clickCreateUser();
+    await mobileUsersPage.fillCreateUserForm(user);
+    await mobileUsersPage.triggerFieldValidation();
+    await mobileUsersPage.submitCreateUser();
   });
 
   await test.step('Verify user appears in listing', async () => {

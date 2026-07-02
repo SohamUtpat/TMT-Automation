@@ -39,11 +39,7 @@ export const test = base.extend<DashboardFixtures, WorkerFixtures>({
 
   dashboardPage: async ({ workerPage }, use) => {
     const dashboardPage = new DashboardPage(workerPage);
-
-    if (!/\/dashboard(?:\/|$|\?)/.test(workerPage.url())) {
-      await dashboardPage.navigateToDashboard();
-    }
-
+    await dashboardPage.ensureDashboardReady();
     await use(dashboardPage);
   },
 });

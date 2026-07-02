@@ -1,15 +1,14 @@
 import { test, expect } from '../fixtures/groups.fixture';
-import { GroupsData } from '../data/GroupsData';
 
 test('TC_AP_124 - Verify Search by Group Name and Code', async ({ groupsPage }) => {
-  await groupsPage.expectGroupsLoaded();
+  const hqGroup = await groupsPage.prepareHqGroupFromApi();
 
-  await groupsPage.searchGroups(GroupsData.search.byName);
-  await expect(groupsPage.groupRow(GroupsData.hqGroup.name)).toBeVisible();
-  await groupsPage.expectSearchResultsMatch(GroupsData.search.byName);
+  await groupsPage.searchGroups(hqGroup.name);
+  await expect(groupsPage.groupRow(hqGroup.name)).toBeVisible();
+  await groupsPage.expectSearchResultsMatch(hqGroup.name);
 
   await groupsPage.clearSearch();
-  await groupsPage.searchGroups(GroupsData.search.byCode);
-  await expect(groupsPage.groupRow(GroupsData.hqGroup.name)).toBeVisible();
-  await groupsPage.expectSearchResultsMatch(GroupsData.search.byCode);
+  await groupsPage.searchGroups(hqGroup.code);
+  await expect(groupsPage.groupRow(hqGroup.name)).toBeVisible();
+  await groupsPage.expectSearchResultsMatch(hqGroup.code);
 });

@@ -19,7 +19,7 @@ test('TC_AP_159 - Verify Optional vs Required Fields', async ({ mobileUsersPage 
       email: '',
       password: '',
     });
-    await mobileUsersPage.submitCreateUser();
+    await mobileUsersPage.submitCreateUser({ waitForApi: false });
     await mobileUsersPage.expectValidationMessage(MobileUsersData.validation.required);
     await expect(mobileUsersPage.firstNameInput()).toBeVisible();
   });

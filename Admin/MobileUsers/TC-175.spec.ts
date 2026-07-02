@@ -5,7 +5,10 @@ test('TC_AP_175 - Verify No Minimum Name Length', async ({ mobileUsersPage }) =>
   const user = MobileUsersData.buildValidUser({ firstName: 'A', lastName: 'B' });
 
   await test.step('Create user with single-character name fields', async () => {
-    await mobileUsersPage.createMobileUser(user);
+    await mobileUsersPage.clickCreateUser();
+    await mobileUsersPage.fillCreateUserForm(user);
+    await mobileUsersPage.triggerFieldValidation();
+    await mobileUsersPage.submitCreateUser();
   });
 
   await test.step('Verify user appears in listing', async () => {

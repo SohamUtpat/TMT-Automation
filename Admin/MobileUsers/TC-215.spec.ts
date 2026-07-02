@@ -10,6 +10,9 @@ test('TC_AP_215 - Verify Filter Clear All', async ({ mobileUsersPage }) => {
   });
 
   await test.step('Verify listing still shows results', async () => {
-    expect(await mobileUsersPage.getVisibleRowCount()).toBeGreaterThan(0);
+    const apiTotal = await mobileUsersPage.getApiMobileUsersCount();
+    const rows = await mobileUsersPage.getVisibleRowCount();
+    expect(rows).toBeGreaterThan(0);
+    expect(rows).toBeLessThanOrEqual(apiTotal);
   });
 });

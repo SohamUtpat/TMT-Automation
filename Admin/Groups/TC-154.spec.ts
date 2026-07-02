@@ -1,17 +1,18 @@
 import { test, expect } from '../fixtures/groups.fixture';
-import { GroupsData } from '../data/GroupsData';
 
 test('TC_AP_154 - Verify User Can Be Removed From Group Members List', async ({ groupsPage }) => {
-  await groupsPage.openMembersList(GroupsData.groupWithMembers.name);
+  const group = await groupsPage.prepareGroupWithMembersFromApi({ excludeHq: true });
+  await groupsPage.openMembersList(group.name);
 
-  const memberCountBefore = await groupsPage.memberRows().count();
-  expect(memberCountBefore).toBeGreaterThan(0);
+  const totalBefore = await groupsPage.getMembersTotalCount();
+  expect(totalBefore).toBeGreaterThan(0);
 
   await groupsPage.selectMemberByIndex(0);
   await groupsPage.removeSelectedMembers();
 
-  const memberCountAfter = await groupsPage.memberRows().count();
-  expect(memberCountAfter).toBeLessThan(memberCountBefore);
+  await expect
+    .poll(async () => groupsPage.getMembersTotalCount())
+    .toBeLessThan(totalBefore);
 
   await groupsPage.goBackToGroups();
 });

@@ -9,6 +9,9 @@ test('TC_AP_214 - Verify Filter Select All Roles', async ({ mobileUsersPage }) =
   });
 
   await test.step('Verify filtered listing has results', async () => {
-    expect(await mobileUsersPage.getVisibleRowCount()).toBeGreaterThan(0);
+    const apiTotal = await mobileUsersPage.getApiMobileUsersCount();
+    const rows = await mobileUsersPage.getVisibleRowCount();
+    expect(rows).toBeGreaterThan(0);
+    expect(rows).toBeLessThanOrEqual(apiTotal);
   });
 });

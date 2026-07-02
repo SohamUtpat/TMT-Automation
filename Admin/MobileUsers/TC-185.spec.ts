@@ -9,7 +9,7 @@ test('TC_AP_185 - Verify Doraku Accepts Integers Only', async ({ mobileUsersPage
 
   await test.step('Submit create form with invalid Doraku code', async () => {
     await mobileUsersPage.fillCreateUserForm({ dorakuCode: 'abc@#$' });
-    await mobileUsersPage.submitCreateUser();
+    await mobileUsersPage.submitCreateUser({ waitForApi: false });
   });
 
   await test.step('Verify invalid Doraku validation message', async () => {

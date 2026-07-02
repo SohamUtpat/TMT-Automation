@@ -12,7 +12,7 @@ test('TC_AP_186 - Verify User Cannot Be Created With Invalid Inputs', async ({ m
       email: TestDataGenerator.generateInvalidEmail(),
       password: 'weak',
     });
-    await mobileUsersPage.submitCreateUser();
+    await mobileUsersPage.submitCreateUser({ waitForApi: false });
   });
 
   await test.step('Verify form remains open and user is not created', async () => {

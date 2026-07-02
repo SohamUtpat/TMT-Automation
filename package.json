@@ -7,7 +7,15 @@
     "test": "playwright test",
     "test:login": "playwright test Admin/Login",
     "test:dashboard": "playwright test Admin/DashBoard",
+    "test:groups": "playwright test Admin/Groups",
     "test:mobile-users": "playwright test Admin/MobileUsers",
+    "test:mobile-users:first10": "playwright test Admin/MobileUsers/TC-157.spec.ts Admin/MobileUsers/TC-158.spec.ts Admin/MobileUsers/TC-159.spec.ts Admin/MobileUsers/TC-160.spec.ts Admin/MobileUsers/TC-161.spec.ts Admin/MobileUsers/TC-162.spec.ts Admin/MobileUsers/TC-163.spec.ts Admin/MobileUsers/TC-164.spec.ts Admin/MobileUsers/TC-165.spec.ts Admin/MobileUsers/TC-166.spec.ts",
+    "test:admin-users": "playwright test Admin/AdminUsers",
+    "test:admin-users:first10": "playwright test Admin/AdminUsers/TC-241.spec.ts Admin/AdminUsers/TC-246.spec.ts Admin/AdminUsers/TC-247.spec.ts Admin/AdminUsers/TC-264.spec.ts Admin/AdminUsers/TC-265.spec.ts Admin/AdminUsers/TC-222.spec.ts Admin/AdminUsers/TC-225.spec.ts Admin/AdminUsers/TC-224.spec.ts Admin/AdminUsers/TC-252.spec.ts Admin/AdminUsers/TC-253.spec.ts",
+    "test:change-password": "playwright test Admin/ChangePassword",
+    "test:change-language": "playwright test Admin/ChangeLanguage",
+    "test:forms": "playwright test Admin/Forms",
+    "test:settings": "playwright test Admin/Settings",
     "test:headed": "playwright test --headed",
     "test:ui": "playwright test --ui",
     "report": "playwright show-report"
@@ -18,6 +26,7 @@
   "type": "commonjs",
   "devDependencies": {
     "@playwright/test": "^1.61.0",
-    "@types/node": "^26.0.0"
+    "@types/node": "^26.0.0",
+    "xlsx": "^0.18.5"
   }
 }

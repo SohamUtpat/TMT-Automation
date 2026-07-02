@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test';
+import { ensureAuthenticated as restoreSession } from '../utils/ensureAuthenticated';
 
 /** Groups table column indices — first column is the group icon. */
 export const GROUP_TABLE_COL = {
@@ -12,6 +13,13 @@ export const GROUP_TABLE_COL = {
 
 export type GroupTableColumn = keyof typeof GROUP_TABLE_COL;
 
+export type ApiGroup = {
+  id: string;
+  name: string;
+  code: string;
+  userCount: number;
+};
+
 export class GroupsPage {
   readonly page: Page;
 
@@ -21,24 +29,105 @@ export class GroupsPage {
 
   // ── Navigation ──────────────────────────────────────────────────────────────
 
+  isOnGroupsListPage(): boolean {
+    const pathname = new URL(this.page.url()).pathname.replace(/\/$/, '');
+    return pathname === '/groups';
+  }
+
   async navigateToGroups() {
-    if (!/\/groups(?:\/|$|\?)/.test(this.page.url())) {
-      const groupApi = this.page
-        .waitForResponse(
-          (resp) => resp.url().includes('/group') && resp.request().method() === 'GET',
-          { timeout: 120_000 },
-        )
-        .catch(() => undefined);
-      await this.page.goto('/groups', { waitUntil: 'commit', timeout: 120_000 });
+    if (!this.isOnGroupsListPage()) {
+      const groupApi = this.waitForGroupListResponse();
+      await this.page.goto('/groups', { waitUntil: 'commit', timeout: 60_000 });
       await groupApi;
     }
-    await this.expectGroupsLoaded();
+    await this.ensureAuthenticated();
+    if (!this.isOnGroupsListPage()) {
+      const groupApi = this.waitForGroupListResponse();
+      await this.page.goto('/groups', { waitUntil: 'commit', timeout: 60_000 });
+      await groupApi;
+    }
+    await this.expectGroupsTitle();
+  }
+
+  /** Re-login when storageState token was rejected and the app redirected to login. */
+  async ensureAuthenticated() {
+    await restoreSession(this.page);
+  }
+
+  /** Fast path when the shared worker page is already on a ready Groups list. */
+  async ensureGroupsReady() {
+    if (!this.isOnGroupsListPage()) {
+      await this.navigateToGroups();
+      return;
+    }
+
+    await this.ensureAuthenticated();
+    await this.expectGroupsTitle();
+  }
+
+  async expectGroupsTitle() {
+    await expect(this.page.locator('#pageTitle')).toHaveText('Groups', { timeout: 15_000 });
   }
 
   async expectGroupsLoaded() {
-    await expect(this.createGroupButton()).toBeVisible({ timeout: 90_000 });
-    await expect(this.page.locator('#pageTitle')).toHaveText('Groups', { timeout: 30_000 });
-    await expect(this.searchInput()).toBeVisible({ timeout: 30_000 });
+    const loading = this.page.getByText('Loading...', { exact: true });
+    const loadingVisible = await loading.isVisible().catch(() => false);
+
+    if (loadingVisible) {
+      await loading.waitFor({ state: 'hidden', timeout: 90_000 }).catch(async () => {
+        await this.page.reload({ waitUntil: 'commit', timeout: 120_000 });
+        await this.waitForGroupListResponse();
+      });
+    }
+
+    await expect(this.createGroupButton()).toBeVisible({ timeout: 30_000 });
+    await expect(this.page.locator('#pageTitle')).toHaveText('Groups', { timeout: 15_000 });
+    await expect(this.searchInput()).toBeVisible({ timeout: 15_000 });
+    await expect(this.table()).toBeVisible({ timeout: 15_000 });
+  }
+
+  private async isOnFirstPage(): Promise<boolean> {
+    return (await this.prevPageButton().getAttribute('aria-disabled')) === 'true';
+  }
+
+  private async hasActiveSearch(): Promise<boolean> {
+    return (await this.searchInput().inputValue()).trim() !== '';
+  }
+
+  /** Close modals, return to list view, and reset search/pagination only when needed. */
+  async resetAfterTest() {
+    const createModal = this.createModal();
+    if (await createModal.isVisible().catch(() => false)) {
+      await this.cancelCreate().catch(() => undefined);
+    }
+
+    const editModal = this.editModal();
+    if (await editModal.isVisible().catch(() => false)) {
+      await this.cancelEdit().catch(() => undefined);
+    }
+
+    const deleteModal = this.deleteConfirmModal();
+    if (await deleteModal.isVisible().catch(() => false)) {
+      await this.cancelDelete().catch(() => undefined);
+    }
+
+    const blockedModal = this.deleteBlockedModal();
+    if (await blockedModal.isVisible().catch(() => false)) {
+      await this.dismissBlockedDelete().catch(() => undefined);
+    }
+
+    if (!this.isOnGroupsListPage()) {
+      await this.navigateToGroups().catch(() => undefined);
+      return;
+    }
+
+    if (await this.hasActiveSearch()) {
+      await this.clearSearch().catch(() => undefined);
+    }
+
+    if (!(await this.isOnFirstPage())) {
+      await this.goToFirstPage().catch(() => undefined);
+    }
   }
 
   // ── List page locators ──────────────────────────────────────────────────────
@@ -66,18 +155,71 @@ export class GroupsPage {
 
   paginationInfo = () => this.page.locator('.ant-pagination-total-text');
 
-  pageNumber = (num: number) =>
-    this.pagination().locator('.ant-pagination-item').filter({ hasText: String(num) });
+  pageNumber = (num: number) => this.pagination().locator(`.ant-pagination-item-${num}`);
 
   prevPageButton = () => this.pagination().locator('.ant-pagination-prev');
 
   nextPageButton = () => this.pagination().locator('.ant-pagination-next');
 
   /** Double-left icon rendered inside the prev control (TableView custom pagination). */
-  firstPageButton = () => this.pagination().locator('.ant-pagination-prev .anticon-double-left');
+  firstPageButton = () => this.pagination().getByRole('img', { name: 'double-left' });
 
   /** Double-right icon rendered inside the next control (TableView custom pagination). */
-  lastPageButton = () => this.pagination().locator('.ant-pagination-next .anticon-double-right');
+  lastPageButton = () => this.pagination().getByRole('img', { name: 'double-right' });
+
+  async hasMultiplePages(): Promise<boolean> {
+    const nextDisabled = await this.nextPageButton().getAttribute('aria-disabled');
+    const prevDisabled = await this.prevPageButton().getAttribute('aria-disabled');
+    return !(nextDisabled === 'true' && prevDisabled === 'true');
+  }
+
+  async goToLastPage() {
+    if ((await this.nextPageButton().getAttribute('aria-disabled')) === 'true') {
+      return;
+    }
+
+    await this.waitForTableLoaded();
+    const response = this.waitForGroupListResponse();
+    await this.lastPageButton().click();
+    await response;
+    await this.waitForTableLoaded();
+    await expect(this.nextPageButton()).toHaveAttribute('aria-disabled', 'true');
+  }
+
+  async goToFirstPage() {
+    if ((await this.prevPageButton().getAttribute('aria-disabled')) === 'true') {
+      return;
+    }
+
+    await this.waitForTableLoaded();
+    const response = this.waitForGroupListResponse();
+    await this.firstPageButton().click();
+    await response;
+    await this.waitForTableLoaded();
+    await expect(this.prevPageButton()).toHaveAttribute('aria-disabled', 'true');
+    await expect(this.pageNumber(1)).toHaveClass(/ant-pagination-item-active/);
+  }
+
+  async goToNextPage() {
+    if ((await this.nextPageButton().getAttribute('aria-disabled')) === 'true') {
+      return;
+    }
+
+    await this.waitForTableLoaded();
+    const response = this.waitForGroupListResponse();
+    await this.nextPageButton().locator('button.ant-pagination-item-link').click();
+    await response;
+    await this.waitForTableLoaded();
+  }
+
+  async goToPageNumber(num: number) {
+    await this.waitForTableLoaded();
+    const response = this.waitForGroupListResponse();
+    await this.pageNumber(num).click();
+    await response;
+    await this.waitForTableLoaded();
+    await expect(this.pageNumber(num)).toHaveClass(/ant-pagination-item-active/);
+  }
 
   // ── Modal locators ─────────────────────────────────────────────────────────
 
@@ -176,8 +318,19 @@ export class GroupsPage {
       .catch(() => undefined);
   }
 
+  private async waitForTableLoaded() {
+    await this.page
+      .locator('.ant-table-wrapper .ant-spin-spinning')
+      .waitFor({ state: 'hidden', timeout: 30_000 })
+      .catch(() => undefined);
+  }
+
   async searchGroups(query: string) {
     if (!query) {
+      if ((await this.searchInput().inputValue()).trim() === '') {
+        return;
+      }
+
       const response = this.waitForGroupListResponse();
       await this.searchInput().fill('');
       await response;
@@ -199,7 +352,7 @@ export class GroupsPage {
     const iconTitle = order === 'asc' ? 'Sort Ascending' : 'Sort Descending';
     await this.sortHeader(column).getByTitle(iconTitle).click();
     await this.waitForGroupListResponse();
-    await this.page.waitForTimeout(300);
+    await this.waitForTableLoaded();
   }
 
   async isSortedAscending(values: string[], column?: GroupTableColumn): Promise<boolean> {
@@ -236,23 +389,44 @@ export class GroupsPage {
 
   // ── Create / Edit group ─────────────────────────────────────────────────────
 
+  private async waitForCreateModalReady() {
+    const modal = this.createModal();
+    await expect(modal).toBeVisible({ timeout: 15_000 });
+    await modal.locator('.ant-modal-content').waitFor({ state: 'visible', timeout: 15_000 });
+    await modal
+      .locator('.ant-zoom-enter-active')
+      .waitFor({ state: 'detached', timeout: 10_000 })
+      .catch(() => undefined);
+
+    const nameInput = this.modalNameInput(modal);
+    await expect(nameInput).toBeVisible({ timeout: 15_000 });
+    await expect(nameInput).toBeEnabled({ timeout: 15_000 });
+  }
+
+  private async fillModalInput(input: Locator, value: string) {
+    await expect(input).toBeVisible({ timeout: 15_000 });
+    await expect(input).toBeEnabled({ timeout: 15_000 });
+    await input.fill(value);
+    await input.press('Tab');
+  }
+
   async openCreateGroupModal() {
+    await expect(this.createGroupButton()).toBeEnabled({ timeout: 15_000 });
     await this.createGroupButton().click();
-    await expect(this.createModal()).toBeVisible();
+    await this.waitForCreateModalReady();
   }
 
   async fillCreateForm(name: string, code: string) {
     const modal = this.createModal();
-    const nameInput = this.modalNameInput(modal);
-    const codeInput = this.modalCodeInput(modal);
+    await this.waitForCreateModalReady();
+    await this.fillModalInput(this.modalNameInput(modal), name);
+    await this.fillModalInput(this.modalCodeInput(modal), code);
+  }
 
-    await nameInput.click();
-    await nameInput.fill(name);
-    await nameInput.press('Tab');
-
-    await codeInput.click();
-    await codeInput.fill(code);
-    await codeInput.press('Tab');
+  async fillCreateGroupName(name: string) {
+    const modal = this.createModal();
+    await this.waitForCreateModalReady();
+    await this.fillModalInput(this.modalNameInput(modal), name);
   }
 
   async submitCreate() {
@@ -308,7 +482,8 @@ export class GroupsPage {
     const modal = this.createModal();
     const cancelBtn = modal.getByRole('button', { name: 'Cancel', exact: true });
     await expect(cancelBtn).toBeVisible({ timeout: 10_000 });
-    await cancelBtn.click({ force: true });
+    await expect(cancelBtn).toBeEnabled({ timeout: 10_000 });
+    await cancelBtn.click();
     await expect(modal).toBeHidden({ timeout: 15_000 });
   }
 
@@ -316,6 +491,7 @@ export class GroupsPage {
     await this.openCreateGroupModal();
     await this.fillCreateForm(name, code);
     await this.submitCreateAndWait();
+    await this.searchGroups(name);
   }
 
   async openEditGroup(groupName: string) {
@@ -325,8 +501,11 @@ export class GroupsPage {
 
   async updateGroupName(newName: string) {
     const modal = this.editModal();
-    await this.modalNameInput(modal).fill('');
-    await this.modalNameInput(modal).fill(newName);
+    await expect(modal).toBeVisible({ timeout: 15_000 });
+    const nameInput = this.modalNameInput(modal);
+    await expect(nameInput).toBeVisible({ timeout: 15_000 });
+    await nameInput.fill('');
+    await nameInput.fill(newName);
     await modal.getByRole('button', { name: 'Update' }).click();
     await this.waitForGroupListResponse();
   }
@@ -339,7 +518,7 @@ export class GroupsPage {
     const modal = this.createModal();
     const input = modal.locator('.group-modal-body-image-camera input[type="file"]');
     await input.setInputFiles(filePath);
-    await this.page.waitForTimeout(1000);
+    await expect(modal.locator('.group-modal-body-image')).toBeVisible({ timeout: 5_000 });
   }
 
   async expectUploadError(message: string | RegExp) {
@@ -385,9 +564,163 @@ export class GroupsPage {
     }
   }
 
+  // ── API helpers ─────────────────────────────────────────────────────────────
+
+  private get apiBaseUrl(): string {
+    const base = (process.env.BASE_URL ?? 'http://18.142.102.68').replace(/\/$/, '');
+    return `${base}/api/user-management-service`;
+  }
+
+  private extractGroups(body: unknown): ApiGroup[] {
+    if (!body || typeof body !== 'object') {
+      return [];
+    }
+
+    const record = body as Record<string, unknown>;
+    const data = record.data;
+    let items: unknown[] = [];
+
+    if (Array.isArray(data)) {
+      items = data;
+    } else if (data && typeof data === 'object') {
+      const nested = data as Record<string, unknown>;
+      if (Array.isArray(nested.groups)) {
+        items = nested.groups;
+      } else if (Array.isArray(nested.content)) {
+        items = nested.content;
+      } else if (Array.isArray(nested.data)) {
+        items = nested.data;
+      }
+    } else if (Array.isArray(record.groups)) {
+      items = record.groups;
+    }
+
+    return items
+      .map((item) => {
+        if (!item || typeof item !== 'object') {
+          return null;
+        }
+
+        const group = item as Record<string, unknown>;
+        const name = typeof group.name === 'string' ? group.name : '';
+        const code = typeof group.code === 'string' ? group.code : '';
+        const id = typeof group.id === 'string' ? group.id : '';
+        const userCount =
+          typeof group.userCount === 'number'
+            ? group.userCount
+            : Number(String(group.userCount ?? '0').replace(/,/g, '')) || 0;
+
+        if (!name) {
+          return null;
+        }
+
+        return { id, name, code, userCount };
+      })
+      .filter((group): group is ApiGroup => group !== null);
+  }
+
+  async fetchGroups(options: { page?: number; size?: number } = {}): Promise<ApiGroup[]> {
+    const page = options.page ?? 0;
+    const size = options.size ?? 200;
+    const token = await this.page.evaluate(() => localStorage.getItem('gulf_net_admin-token'));
+
+    const response = await this.page.request.fetch(
+      `${this.apiBaseUrl}/group?page=${page}&size=${size}&search=`,
+      {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token ?? ''}`,
+          language: 'english',
+          Accept: 'application/json, text/plain, */*',
+        },
+      },
+    );
+
+    if (!response.ok()) {
+      throw new Error(`Groups API GET /group failed with status ${response.status()}`);
+    }
+
+    const body = await response.json();
+    return this.extractGroups(body);
+  }
+
+  /** Returns a group with userCount > 0 from the groups API. */
+  async getApiGroupWithMembers(
+    options: { excludeHq?: boolean; minUserCount?: number } = {},
+  ): Promise<ApiGroup> {
+    const groups = await this.fetchGroups();
+    const minCount = options.minUserCount ?? 1;
+    let withMembers = groups.filter((group) => group.userCount >= minCount);
+
+    if (options.excludeHq) {
+      withMembers = withMembers.filter(
+        (group) => group.code !== 'HQ' && group.name !== 'HQ Group',
+      );
+    }
+
+    if (!withMembers.length) {
+      throw new Error(`No groups with at least ${minCount} member(s) found from API`);
+    }
+
+    return withMembers.sort((a, b) => b.userCount - a.userCount)[0];
+  }
+
+  /** First group from the API where userCount > 0 (HQ excluded — no delete action). */
+  async getApiFirstGroupWithMembers(
+    options: { excludeHq?: boolean } = { excludeHq: true },
+  ): Promise<ApiGroup> {
+    const groups = await this.fetchGroups();
+    const group = groups.find((entry) => {
+      if (entry.userCount <= 0) {
+        return false;
+      }
+      if (
+        options.excludeHq &&
+        (entry.code === 'HQ' || entry.name === 'HQ Group')
+      ) {
+        return false;
+      }
+      return true;
+    });
+
+    if (!group) {
+      throw new Error('No group with userCount > 0 found from API');
+    }
+
+    return group;
+  }
+
+  async getApiHqGroup(): Promise<ApiGroup> {
+    const groups = await this.fetchGroups();
+    const hqGroup = groups.find((group) => group.code === 'HQ' || group.name === 'HQ Group');
+
+    if (!hqGroup) {
+      throw new Error('HQ Group not found from API');
+    }
+
+    return hqGroup;
+  }
+
+  async prepareGroupFromApi(group: ApiGroup): Promise<ApiGroup> {
+    await this.searchGroups(group.name);
+    await expect(this.groupRow(group.name)).toBeVisible({ timeout: 30_000 });
+    return group;
+  }
+
+  async prepareHqGroupFromApi(): Promise<ApiGroup> {
+    return this.prepareGroupFromApi(await this.getApiHqGroup());
+  }
+
+  /** Search and locate a group from the API before opening its members list. */
+  async prepareGroupWithMembersFromApi(
+    options: { excludeHq?: boolean; minUserCount?: number } = {},
+  ): Promise<ApiGroup> {
+    return this.prepareGroupFromApi(await this.getApiGroupWithMembers(options));
+  }
+
   // ── Members page ────────────────────────────────────────────────────────────
 
-  async openMembersList(groupName: string) {
+  async openMembersList(groupName: string, options: { minimal?: boolean } = {}) {
     const membersRequest = this.page.waitForResponse(
       (resp) => resp.url().includes('/user/mobile') && resp.request().method() === 'POST',
       { timeout: 30_000 },
@@ -395,6 +728,11 @@ export class GroupsPage {
     await this.memberCountLink(groupName).click();
     await membersRequest;
     await expect(this.backButton()).toBeVisible({ timeout: 15_000 });
+
+    if (options.minimal) {
+      return;
+    }
+
     await expect(this.membersPageTitle(groupName)).toBeVisible({ timeout: 15_000 });
     await expect(this.memberRows().first()).toBeVisible({ timeout: 30_000 });
   }

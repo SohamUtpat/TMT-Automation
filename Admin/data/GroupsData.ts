@@ -1,40 +1,6 @@
 export const GroupsData = {
   pageTitle: 'Groups',
 
-  hqGroup: {
-    name: 'HQ Group',
-    code: 'HQ',
-  },
-
-  /** Group with members — used for members-list and single remove-user tests. */
-  groupWithMembers: {
-    name: 'Test--4June',
-    code: 'Hi',
-  },
-
-  /** Large stable group for multi-member removal (TC-155). */
-  groupForMultiMemberRemoval: {
-    name: 'HQ Group',
-    code: 'HQ',
-  },
-
-  /** Group with many members and a delete button — used for delete-blocked test. */
-  groupForDeleteBlocked: {
-    name: 'TestingQA group',
-    code: '123',
-  },
-
-  /** Group with zero members — used for successful delete tests. */
-  emptyGroup: {
-    name: 'Production group',
-    code: 'Production group',
-  },
-
-  search: {
-    byName: 'HQ Group',
-    byCode: 'HQ',
-  },
-
   sortColumns: ['Name', 'Code', 'Created On'] as const,
 
   validation: {

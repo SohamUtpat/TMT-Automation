@@ -5,6 +5,16 @@ export class TestDataGenerator {
     return `${Date.now()}${Math.floor(Math.random() * 1000)}`;
   }
 
+  /** Letters only — matches mobile user NAME_PATTERN (no digits). */
+  private static randomLetters(length: number): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+    let result = '';
+    for (let i = 0; i < length; i++) {
+      result += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return result;
+  }
+
   static generateUniqueUsername(): string {
     return `user_${this.suffix()}`;
   }
@@ -34,11 +44,11 @@ export class TestDataGenerator {
   }
 
   static generateRandomName(): string {
-    return `First${this.suffix().slice(-6)}`;
+    return `First${this.randomLetters(6)}`;
   }
 
   static generateRandomLastName(): string {
-    return `Last${this.suffix().slice(-6)}`;
+    return `Last${this.randomLetters(6)}`;
   }
 
   /** Meets PASSWORD_PATTERN: upper, lower, number, special, 8–15 chars. */

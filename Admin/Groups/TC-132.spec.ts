@@ -4,11 +4,7 @@ import { GroupsData } from '../data/GroupsData';
 test('TC_AP_132 - Verify Mandatory Fields Without Profile Photo', async ({ groupsPage }) => {
   const group = GroupsData.uniqueGroup('Man');
 
-  await groupsPage.openCreateGroupModal();
-  await groupsPage.fillCreateForm(group.name, group.code);
-  await groupsPage.submitCreate();
-  await groupsPage.page.waitForTimeout(1000);
-
+  await groupsPage.createGroup(group.name, group.code);
   await groupsPage.expectGroupVisible(group.name);
   await groupsPage.deleteGroupIfPossible(group.name);
 });

@@ -8,10 +8,10 @@ export default defineConfig({
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  // Use 1 worker unless you have separate admin accounts per worker.
-  // This app logs out duplicate sessions for the same user (4 workers = flaky Groups tests).
-  workers: Number(process.env.PW_WORKERS ?? 2),
-  timeout: 180_000,
+  // Default 1 worker: the app invalidates duplicate sessions for the same admin user.
+  // Set PW_WORKERS=2+ only when separate admin accounts are configured per worker.
+  workers: Number(process.env.PW_WORKERS ?? 1),
+  timeout: 120_000,
   reporter: [['html', { open: 'never' }], ['list']],
   use: {
     baseURL: process.env.BASE_URL ?? 'http://18.142.102.68',

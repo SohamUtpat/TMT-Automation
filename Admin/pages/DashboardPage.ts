@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test';
+import { ensureAuthenticated as restoreSession } from '../utils/ensureAuthenticated';
 
 export class DashboardPage {
   readonly page: Page;
@@ -35,27 +36,69 @@ export class DashboardPage {
   xAxisLabels = () =>
     this.page.locator('.recharts-xAxis .recharts-cartesian-axis-tick-value');
 
-  async navigateToDashboard() {
-    if (/\/dashboard(?:\/|$|\?)/.test(this.page.url())) {
-      await expect(this.totalMobileAppUsers()).toBeVisible({ timeout: 15_000 });
-      return;
-    }
-
-    const dashboardApi = this.page
+  private waitForDashboardResponse() {
+    return this.page
       .waitForResponse(
         (resp) => resp.url().includes('/dashboard') && resp.request().method() === 'GET',
         { timeout: 60_000 },
       )
       .catch(() => undefined);
-    await this.page.goto('/dashboard', { waitUntil: 'commit', timeout: 60_000 });
-    await this.page.waitForURL(/\/dashboard(?:\/|$|\?)/, { timeout: 60_000 });
-    await dashboardApi;
+  }
+
+  async navigateToDashboard() {
+    await this.ensureAuthenticated();
+
+    if (/\/dashboard(?:\/|$|\?)/.test(this.page.url())) {
+      if (await this.totalMobileAppUsers().isVisible().catch(() => false)) {
+        await this.expectDashboardLoaded();
+        return;
+      }
+    }
+
+    const dashboardApi = this.waitForDashboardResponse();
+    await this.page.goto('/dashboard', { waitUntil: 'commit', timeout: 120_000 });
+    await this.ensureAuthenticated();
+
+    if (!/\/dashboard(?:\/|$|\?)/.test(this.page.url())) {
+      const retryApi = this.waitForDashboardResponse();
+      await this.page.goto('/dashboard', { waitUntil: 'commit', timeout: 120_000 });
+      await retryApi;
+    } else {
+      await dashboardApi;
+    }
+
+    await this.expectDashboardLoaded();
+  }
+
+  /** Re-login when storageState token was rejected and the app redirected to login. */
+  async ensureAuthenticated() {
+    await restoreSession(this.page);
+  }
+
+  async ensureDashboardReady() {
+    if (!/\/dashboard(?:\/|$|\?)/.test(this.page.url())) {
+      await this.navigateToDashboard();
+      return;
+    }
+
+    await this.ensureAuthenticated();
     await this.expectDashboardLoaded();
   }
 
   async expectDashboardLoaded() {
-    await expect(this.totalMobileAppUsers()).toBeVisible({ timeout: 45_000 });
+    const loading = this.page.getByText('Loading...', { exact: true });
+    const loadingVisible = await loading.isVisible().catch(() => false);
+
+    if (loadingVisible) {
+      await loading.waitFor({ state: 'hidden', timeout: 90_000 }).catch(async () => {
+        const dashboardApi = this.waitForDashboardResponse();
+        await this.page.reload({ waitUntil: 'commit', timeout: 120_000 });
+        await dashboardApi;
+      });
+    }
+
     await expect(this.page.locator('#pageTitle')).toHaveText('Dashboard', { timeout: 15_000 });
+    await expect(this.totalMobileAppUsers()).toBeVisible({ timeout: 45_000 });
   }
 
   async scrollToGraph() {

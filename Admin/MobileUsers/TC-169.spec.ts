@@ -3,11 +3,12 @@ import { MobileUsersData } from '../data/MobileUsersData';
 
 test('TC_AP_169 - Verify Multiple Group Selection', async ({ mobileUsersPage }) => {
   const user = MobileUsersData.buildValidUser();
+  const group = await mobileUsersPage.getApiNonHqGroupWithMembers();
 
   await mobileUsersPage.clickCreateUser();
   await mobileUsersPage.fillCreateUserForm(user);
   await mobileUsersPage.expectHqGroupAssigned();
-  await mobileUsersPage.addGroupFromDropdown('Test');
+  await mobileUsersPage.addGroupFromDropdown(group);
   await mobileUsersPage.submitCreateUser();
   await mobileUsersPage.expectUserSavedSuccess();
 

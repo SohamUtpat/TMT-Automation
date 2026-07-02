@@ -6,10 +6,24 @@ import { isAuthStateValid } from './utils/authState';
 
 const authFile = path.join(__dirname, '../playwright/.auth/admin.json');
 
+async function hasActiveDashboardSession(page: import('@playwright/test').Page): Promise<boolean> {
+  await page.goto('/dashboard', { waitUntil: 'commit', timeout: 120_000 });
+
+  const onLogin = await page.locator('#username').isVisible().catch(() => false);
+  if (onLogin) {
+    return false;
+  }
+
+  return page.locator('#pageTitle').isVisible().catch(() => false);
+}
+
 setup('authenticate admin', async ({ page }) => {
   fs.mkdirSync(path.dirname(authFile), { recursive: true });
 
-  if (isAuthStateValid(authFile)) {
+  // If the saved auth token is still valid, reuse it.
+  // This avoids failing setup when the admin password has been changed by a test.
+  if (isAuthStateValid(authFile, 0)) {
+    await page.context().storageState({ path: authFile });
     return;
   }
 

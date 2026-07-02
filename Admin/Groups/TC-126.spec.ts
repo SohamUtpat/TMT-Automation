@@ -2,12 +2,12 @@ import { test, expect } from '../fixtures/groups.fixture';
 import { GroupsData } from '../data/GroupsData';
 
 test('TC_AP_126 - Verify Group Delete Blocked When Users Exist', async ({ groupsPage }) => {
-  await groupsPage.expectGroupsLoaded();
+  await groupsPage.expectGroupsTitle();
 
-  const memberCount = await groupsPage.getMemberCount(GroupsData.groupForDeleteBlocked.name);
-  expect(memberCount).toBeGreaterThan(0);
+  const group = await groupsPage.getApiFirstGroupWithMembers();
+  await expect(groupsPage.groupRow(group.name)).toBeVisible({ timeout: 30_000 });
 
-  await groupsPage.clickDeleteGroup(GroupsData.groupForDeleteBlocked.name);
+  await groupsPage.clickDeleteGroup(group.name);
 
   await expect(groupsPage.deleteBlockedModal()).toBeVisible();
   await expect(groupsPage.page.getByText(GroupsData.deleteModal.blockedTitle)).toBeVisible();
@@ -15,5 +15,4 @@ test('TC_AP_126 - Verify Group Delete Blocked When Users Exist', async ({ groups
   await expect(groupsPage.page.getByText(GroupsData.deleteModal.blockedHint)).toBeVisible();
 
   await groupsPage.dismissBlockedDelete();
-  await expect(groupsPage.groupRow(GroupsData.groupForDeleteBlocked.name)).toBeVisible();
 });

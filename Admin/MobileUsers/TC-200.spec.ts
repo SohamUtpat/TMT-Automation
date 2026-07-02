@@ -9,6 +9,7 @@ test('TC_AP_200 - Verify Listing Columns', async ({ mobileUsersPage }) => {
   });
 
   await test.step('Verify edit action is available on listing rows', async () => {
-    await expect(mobileUsersPage.tableRows().first().locator('.edit-icon')).toBeVisible();
+    const user = await mobileUsersPage.getApiListingUser();
+    await expect(mobileUsersPage.editIcon(user.userName)).toBeVisible();
   });
 });

@@ -12,7 +12,7 @@ test('TC_AP_184 - Verify Doraku Over 20 Shows Validation', async ({ mobileUsersP
     await mobileUsersPage.fillCreateUserForm({
       dorakuCode: TestDataGenerator.generateLongString(21),
     });
-    await mobileUsersPage.submitCreateUser();
+    await mobileUsersPage.submitCreateUser({ waitForApi: false });
   });
 
   await test.step('Verify Doraku max length validation message', async () => {

@@ -2,10 +2,7 @@ import { test, expect } from '../fixtures/groups.fixture';
 import { GroupsData } from '../data/GroupsData';
 
 test('TC_AP_125 - Verify Sorting on Name Code and Created Date', async ({ groupsPage }) => {
-  await groupsPage.expectGroupsLoaded();
-
-  const columnKeys = {
-    Name: 'name',
+  const columnKeys = {    Name: 'name',
     Code: 'code',
     'Created On': 'createdOn',
   } as const;

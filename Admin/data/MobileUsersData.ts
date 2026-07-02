@@ -38,6 +38,7 @@ export const MobileUsersData = {
     'Groups',
     'Delete Message',
     'Role HQ',
+    'Approver',
     'Status',
     'Language',
     'Created On',
@@ -94,8 +95,69 @@ export const MobileUsersData = {
     usernameMax: 50,
     mobileMax: 15,
     dorakuMax: 20,
+    bulkDorakuMax: 10,
     passwordMin: 8,
     passwordMax: 15,
+    bulkUploadMaxRecords: 30_000,
+    bulkUploadBatchSize: 1_000,
+  },
+
+  bulkUpload: {
+    pageHeading: 'Bulk Upload',
+    historyPageTitle: 'Bulk Upload History',
+    templateFileName: 'Bulk_Upload_Template.csv',
+
+    historyColumns: [
+      'File Name',
+      'Download File',
+      'Uploaded On',
+      'Current Status',
+      'Success Records',
+      'Failed Records',
+      'Download Error Report',
+    ] as const,
+
+    /** Rules shown on the bulk upload page — used by TC_AP_273 / TC_AP_274. */
+    rules: [
+      'Only .csv file format is supported.',
+      'Maximum records should be 30000.',
+      'Username should be unique.',
+      'Acceptance criteria for the username is a combination of: alphabets, numbers, dashes, and underscores.',
+      'The username can have a maximum of 50 characters and a minimum of 3 characters.',
+      'Maximum character limit for first name and last name is 50 characters.',
+      'Enter a valid email address.',
+      'Enter a valid mobile number.',
+      'Values in the language field should be either eng or thai or jpn.',
+      'Groups can accept multiple groups separated by a comma',
+      'Roles accept comma separated values',
+      'The Doraku code field accepts maximum 10 alphanumeric characters',
+      'The Mobile, Doraku code, Group, and Profile photo fields are optional',
+    ] as const,
+
+    /** Field guidance from TC_AP_273 manual steps. */
+    fieldRules: [
+      { label: 'valid email', pattern: /valid email/i },
+      { label: 'valid mobile number', pattern: /valid mobile number/i },
+      { label: 'language eng thai jpn', pattern: /eng or thai or jpn/i },
+      { label: 'mobile optional', pattern: /Mobile, Doraku code.*optional/i },
+      { label: 'groups comma separated', pattern: /Groups can accept multiple groups/i },
+      { label: 'roles comma separated', pattern: /Roles accept comma separated values/i },
+      { label: 'csv only', pattern: /Only \.csv file format is supported/i },
+      { label: 'max 30000 records', pattern: /Maximum records should be 30000/i },
+      { label: 'username unique', pattern: /Username should be unique/i },
+      { label: 'first last name max 50', pattern: /first name and last name is 50 characters/i },
+      { label: 'username min 3 max 50', pattern: /minimum of 3 characters/i },
+      { label: 'username pattern', pattern: /alphabets, numbers, dashes, and underscores/i },
+      { label: 'doraku max 10', pattern: /maximum 10 alphanumeric characters/i },
+    ] as const,
+
+    messages: {
+      processed: /Bulk upload processed successfully/i,
+      csvOnly: 'Only CSV files are allowed!',
+      selectFile: 'Please select a file to upload',
+      overBatchLimit: /1000|exceed.*1000|more than 1000/i,
+      overMaxRecords: /30000|exceed.*30000|more than 30000/i,
+    },
   },
 
   /** Builds a fully valid mobile user payload with unique fields. */

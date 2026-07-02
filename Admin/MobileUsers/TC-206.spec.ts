@@ -2,10 +2,17 @@ import { test, expect } from '../fixtures/mobile-users.fixture';
 import { MobileUsersData } from '../data/MobileUsersData';
 
 test('TC_AP_206 - Verify Pagination 25 Per Page', async ({ mobileUsersPage }) => {
-  await test.step('Verify default page shows at most 25 rows', async () => {
+  const apiTotal = await mobileUsersPage.getApiMobileUsersCount();
+  const pageSize = MobileUsersData.pagination.defaultPageSize;
+
+  await test.step('Verify default page matches API total and page size', async () => {
     const rows = await mobileUsersPage.getVisibleRowCount();
-    expect(rows).toBeLessThanOrEqual(MobileUsersData.pagination.defaultPageSize);
-    expect(rows).toBeGreaterThan(0);
+    const uiTotal = await mobileUsersPage.getTotalUserCount();
+    expect(uiTotal).toBe(apiTotal);
+    expect(rows).toBeLessThanOrEqual(pageSize);
+    if (apiTotal > 0) {
+      expect(rows).toBe(Math.min(pageSize, apiTotal));
+    }
   });
 
   await test.step('Navigate to next page when available', async () => {

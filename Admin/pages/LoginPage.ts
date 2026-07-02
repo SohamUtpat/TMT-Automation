@@ -121,11 +121,15 @@ export class LoginPage {
     await this.clearLoginForm();
   }
 
-  async login(username: string, password: string) {
-    const loginResponse = this.waitForLoginApi();
+  async submitLoginForm(username: string, password: string) {
     await this.username.fill(username);
     await this.password.fill(password);
     await this.loginBtn.click();
+  }
+
+  async login(username: string, password: string) {
+    const loginResponse = this.waitForLoginApi();
+    await this.submitLoginForm(username, password);
     await loginResponse;
   }
 
@@ -144,5 +148,10 @@ export class LoginPage {
     await expect(this.page.getByText(loginData.invalidCredentialsMessage)).toBeVisible({
       timeout: 2_000,
     });
+  }
+
+  async expectEmptyFieldValidationErrors() {
+    await expect(this.page.getByText(loginData.usernameRequiredMessage)).toBeVisible();
+    await expect(this.page.getByText(loginData.passwordRequiredMessage)).toBeVisible();
   }
 }

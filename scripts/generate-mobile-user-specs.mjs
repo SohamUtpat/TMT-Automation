@@ -82,16 +82,16 @@ const specs = {
 
   160: `test('TC_AP_160 - Verify Usernames Are Unique', async ({ mobileUsersPage }) => {
   const user = MobileUsersData.buildValidUser();
-  await mobileUsersPage.createMobileUser(user);
+  await mobileUsersPage.createMobileUserViaApi(user);
 
   await mobileUsersPage.clickCreateUser();
   await mobileUsersPage.fillCreateUserForm({
     ...MobileUsersData.buildValidUser(),
     userName: user.userName,
   });
-  await mobileUsersPage.submitCreateUser();
-  await expect(mobileUsersPage.createModal?.() ?? mobileUsersPage.firstNameInput()).toBeVisible();
-  await expect(mobileUsersPage.page.locator('.ant-modal, .create-mobile-form-div').first()).toBeVisible();
+  await mobileUsersPage.submitCreateUser({ waitForApi: false });
+  await expect(mobileUsersPage.firstNameInput()).toBeVisible({ timeout: 15_000 });
+  await expect(mobileUsersPage.page.locator('.ant-message-notice-content').first()).toBeVisible({ timeout: 15_000 });
 });`,
 
   161: `test('TC_AP_161 - Verify Default HQ Group Assigned', async ({ mobileUsersPage }) => {
@@ -103,9 +103,10 @@ const specs = {
   162: `test('TC_AP_162 - Verify HQ Group Pre-Assigned On Create', async ({ mobileUsersPage }) => {
   const user = MobileUsersData.buildValidUser();
   await mobileUsersPage.createMobileUser(user);
+  const hqGroup = await mobileUsersPage.getApiHqGroup();
   await mobileUsersPage.searchUsers(user.userName);
   const groups = await mobileUsersPage.getColumnValues('groups');
-  expect(groups.some((g) => g.includes(MobileUsersData.hqGroupCode))).toBe(true);
+  expect(groups.some((g) => g.includes(hqGroup.code) || g.includes(hqGroup.name))).toBe(true);
 });`,
 
   163: `test('TC_AP_163 - Verify Profile Photo Format Validation', async ({ mobileUsersPage }) => {
@@ -114,9 +115,11 @@ const specs = {
   await mobileUsersPage.expectUploadError(MobileUsersData.validation.invalidImageFormat);
 });`,
 
-  164: `test.skip('TC_AP_164 - Verify Profile Photo In Mobile App', async () => {
-  // Requires mobile app login — out of admin portal scope.
-});`,
+  164: `// import { test } from '../fixtures/mobile-users.fixture';
+//
+// test.skip('TC_AP_164 - Verify Profile Photo In Mobile App', async () => {
+//   // Requires mobile app login — out of admin portal automation scope.
+// });`,
 
   165: `test('TC_AP_165 - Verify HQ Role Assignment', async ({ mobileUsersPage }) => {
   const user = MobileUsersData.buildValidUser({ roleHqYes: true, deleteMsgYes: false });
@@ -151,10 +154,11 @@ const specs = {
 
   169: `test('TC_AP_169 - Verify Multiple Group Selection', async ({ mobileUsersPage }) => {
   const user = MobileUsersData.buildValidUser();
+  const group = await mobileUsersPage.getApiNonHqGroupWithMembers();
   await mobileUsersPage.clickCreateUser();
   await mobileUsersPage.fillCreateUserForm(user);
   await mobileUsersPage.expectHqGroupAssigned();
-  await mobileUsersPage.addGroupFromDropdown('Test');
+  await mobileUsersPage.addGroupFromDropdown(group.name);
   await mobileUsersPage.submitCreateUser();
   await mobileUsersPage.expectUserSavedSuccess();
   await mobileUsersPage.searchUsers(user.userName);
@@ -162,24 +166,26 @@ const specs = {
   expect(groups[0].length).toBeGreaterThan(0);
 });`,
 
-  170: `test.skip('TC_AP_170 - Verify User Reflects In Mobile App', async () => {
-  // Requires mobile app access — out of admin portal scope.
-});`,
+  170: `// import { test } from '../fixtures/mobile-users.fixture';
+//
+// test.skip('TC_AP_170 - Verify User Reflects In Mobile App', async () => {
+//   // Requires mobile app access — out of admin portal automation scope.
+// });`,
 };
 
 // Fix TC-160 - remove invalid createModal reference
 specs[160] = `test('TC_AP_160 - Verify Usernames Are Unique', async ({ mobileUsersPage }) => {
   const user = MobileUsersData.buildValidUser();
-  await mobileUsersPage.createMobileUser(user);
+  await mobileUsersPage.createMobileUserViaApi(user);
 
   await mobileUsersPage.clickCreateUser();
   await mobileUsersPage.fillCreateUserForm({
     ...MobileUsersData.buildValidUser(),
     userName: user.userName,
   });
-  await mobileUsersPage.submitCreateUser();
+  await mobileUsersPage.submitCreateUser({ waitForApi: false });
   await expect(mobileUsersPage.firstNameInput()).toBeVisible({ timeout: 15_000 });
-  await expect(mobileUsersPage.toast(/.+/i).first()).toBeVisible({ timeout: 15_000 });
+  await expect(mobileUsersPage.page.locator('.ant-message-notice-content').first()).toBeVisible({ timeout: 15_000 });
 });`;
 
 // Phase 2: 171-188
@@ -202,7 +208,10 @@ Object.assign(specs, {
   173: `test('TC_AP_173 - Verify Maximum Last Name Length 50', async ({ mobileUsersPage }) => {
   const lastName = TestDataGenerator.generateLongString(MobileUsersData.limits.lastNameMax);
   const user = MobileUsersData.buildValidUser({ lastName });
-  await mobileUsersPage.createMobileUser(user);
+  await mobileUsersPage.clickCreateUser();
+  await mobileUsersPage.fillCreateUserForm(user);
+  await mobileUsersPage.triggerFieldValidation();
+  await mobileUsersPage.submitCreateUser();
   await mobileUsersPage.searchUsers(user.userName);
   await mobileUsersPage.expectUserVisible(user.userName);
 });`,
@@ -210,13 +219,15 @@ Object.assign(specs, {
   174: `test('TC_AP_174 - Verify Last Name Over 50 Shows Validation', async ({ mobileUsersPage }) => {
   await mobileUsersPage.clickCreateUser();
   await mobileUsersPage.fillCreateUserForm({ lastName: TestDataGenerator.generateLongString(51) });
-  await mobileUsersPage.submitCreateUser();
   await mobileUsersPage.expectValidationMessage(MobileUsersData.validation.lastNameMaxLength);
 });`,
 
   175: `test('TC_AP_175 - Verify No Minimum Name Length', async ({ mobileUsersPage }) => {
   const user = MobileUsersData.buildValidUser({ firstName: 'A', lastName: 'B' });
-  await mobileUsersPage.createMobileUser(user);
+  await mobileUsersPage.clickCreateUser();
+  await mobileUsersPage.fillCreateUserForm(user);
+  await mobileUsersPage.triggerFieldValidation();
+  await mobileUsersPage.submitCreateUser();
   await mobileUsersPage.searchUsers(user.userName);
   await mobileUsersPage.expectUserVisible(user.userName);
 });`,
@@ -224,14 +235,20 @@ Object.assign(specs, {
   176: `test('TC_AP_176 - Verify Maximum Username Length 50', async ({ mobileUsersPage }) => {
   const userName = \`u\${TestDataGenerator.generateLongString(48)}\`.slice(0, 50);
   const user = MobileUsersData.buildValidUser({ userName });
-  await mobileUsersPage.createMobileUser(user);
+  await mobileUsersPage.clickCreateUser();
+  await mobileUsersPage.fillCreateUserForm(user);
+  await mobileUsersPage.triggerFieldValidation();
+  await mobileUsersPage.submitCreateUser();
   await mobileUsersPage.searchUsers(user.userName);
   await mobileUsersPage.expectUserVisible(user.userName);
 });`,
 
   177: `test('TC_AP_177 - Verify Minimum Username Length 3', async ({ mobileUsersPage }) => {
   const user = MobileUsersData.buildValidUser({ userName: 'abc' });
-  await mobileUsersPage.createMobileUser(user);
+  await mobileUsersPage.clickCreateUser();
+  await mobileUsersPage.fillCreateUserForm(user);
+  await mobileUsersPage.triggerFieldValidation();
+  await mobileUsersPage.submitCreateUser();
   await mobileUsersPage.searchUsers(user.userName);
   await mobileUsersPage.expectUserVisible(user.userName);
 });`,
@@ -239,20 +256,21 @@ Object.assign(specs, {
   178: `test('TC_AP_178 - Verify Username Over 50 Shows Validation', async ({ mobileUsersPage }) => {
   await mobileUsersPage.clickCreateUser();
   await mobileUsersPage.fillCreateUserForm({ userName: TestDataGenerator.generateLongString(51) });
-  await mobileUsersPage.submitCreateUser();
   await mobileUsersPage.expectValidationMessage(MobileUsersData.validation.usernameLength);
 });`,
 
   179: `test('TC_AP_179 - Verify Username Under 3 Shows Validation', async ({ mobileUsersPage }) => {
   await mobileUsersPage.clickCreateUser();
   await mobileUsersPage.fillCreateUserForm({ userName: 'ab' });
-  await mobileUsersPage.submitCreateUser();
   await mobileUsersPage.expectValidationMessage(MobileUsersData.validation.usernameLength);
 });`,
 
   180: `test('TC_AP_180 - Verify Maximum Mobile Length 15', async ({ mobileUsersPage }) => {
   const user = MobileUsersData.buildValidUser({ phone: '123456789012345' });
-  await mobileUsersPage.createMobileUser(user);
+  await mobileUsersPage.clickCreateUser();
+  await mobileUsersPage.fillCreateUserForm(user);
+  await mobileUsersPage.triggerFieldValidation();
+  await mobileUsersPage.submitCreateUser();
   await mobileUsersPage.searchUsers(user.userName);
   await mobileUsersPage.expectUserVisible(user.userName);
 });`,
@@ -342,17 +360,18 @@ Object.assign(specs, {
   await expect(mobileUsersPage.userNameInput()).toBeDisabled();
 });`,
 
-  191: `test.skip('TC_AP_191 - Verify Old Username Cannot Login Mobile App', async () => {
-  // Requires mobile app login — out of scope.
-});`,
+  191: `// import { test } from '../fixtures/mobile-users.fixture';
+//
+// test.skip('TC_AP_191 - Verify Old Username Cannot Login Mobile App', async () => {
+//   // Invalid / out of scope — requires mobile app login.
+// });`,
 
-  192: `test('TC_AP_192 - Verify Edit Keeps Same Username', async ({ mobileUsersPage }) => {
-  const user = MobileUsersData.buildValidUser();
-  await mobileUsersPage.createMobileUser(user);
-  await mobileUsersPage.searchUsers(user.userName);
-  await mobileUsersPage.openEditUser(user.userName);
-  await expect(mobileUsersPage.userNameInput()).toHaveValue(user.userName);
-});`,
+  192: `// import { test, expect } from '../fixtures/mobile-users.fixture';
+// import { MobileUsersData } from '../data/MobileUsersData';
+//
+// test.skip('TC_AP_192 - Verify Edit Keeps Same Username', async ({ mobileUsersPage }) => {
+//   // Invalid test case — commented out per test plan.
+// });`,
 
   193: `test.skip('TC_AP_193 - Verify Email Update Delivery', async () => {
   // Email delivery cannot be verified from admin portal automation.
@@ -416,7 +435,8 @@ Object.assign(specs, {
   for (const col of MobileUsersData.listingColumns) {
     await mobileUsersPage.expectColumnHeaderVisible(col);
   }
-  await expect(mobileUsersPage.editIcon(await mobileUsersPage.getColumnValues('userName').then((v) => v[0] ?? '')).first()).toBeVisible();
+  const user = await mobileUsersPage.getApiListingUser();
+  await expect(mobileUsersPage.editIcon(user.userName)).toBeVisible();
 });`,
 
   201: `test('TC_AP_201 - Verify Default Active Status In Listing', async ({ mobileUsersPage }) => {
@@ -460,12 +480,19 @@ Object.assign(specs, {
 });`,
 
   206: `test('TC_AP_206 - Verify Pagination 25 Per Page', async ({ mobileUsersPage }) => {
+  const apiTotal = await mobileUsersPage.getApiMobileUsersCount();
+  const pageSize = MobileUsersData.pagination.defaultPageSize;
   const rows = await mobileUsersPage.getVisibleRowCount();
-  expect(rows).toBeLessThanOrEqual(MobileUsersData.pagination.defaultPageSize);
-  expect(rows).toBeGreaterThan(0);
+  const uiTotal = await mobileUsersPage.getTotalUserCount();
+  expect(uiTotal).toBe(apiTotal);
+  expect(rows).toBeLessThanOrEqual(pageSize);
+  if (apiTotal > 0) {
+    expect(rows).toBe(Math.min(pageSize, apiTotal));
+  }
   if (await mobileUsersPage.nextPageButton().isEnabled()) {
+    const response = mobileUsersPage.page.waitForResponse((r) => r.url().includes('/user/mobile'));
     await mobileUsersPage.nextPageButton().click();
-    await mobileUsersPage.waitForUserListResponse?.() ?? mobileUsersPage.page.waitForResponse((r) => r.url().includes('/user/mobile'));
+    await response;
     expect(await mobileUsersPage.getVisibleRowCount()).toBeGreaterThan(0);
   }
 });`,
@@ -478,13 +505,14 @@ Object.assign(specs, {
 });`,
 
   208: `test('TC_AP_208 - Verify Sorting On Listing', async ({ mobileUsersPage }) => {
-  const before = await mobileUsersPage.getColumnValues('userName');
+  const { users } = await mobileUsersPage.fetchMobileUsers();
+  test.skip(users.length < 2, 'Need at least 2 mobile users from API to verify sorting');
   await mobileUsersPage.clickSort('Username', 'asc');
-  const after = await mobileUsersPage.getColumnValues('userName');
-  expect(after.length).toBeGreaterThan(0);
-  expect(JSON.stringify(before)).not.toEqual(JSON.stringify(after));
+  const asc = await mobileUsersPage.getColumnValues('userName');
+  expect(asc).toEqual([...asc].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' })));
   await mobileUsersPage.clickSort('Username', 'desc');
-  expect(await mobileUsersPage.getColumnValues('userName')).not.toHaveLength(0);
+  const desc = await mobileUsersPage.getColumnValues('userName');
+  expect(desc).toEqual([...desc].sort((a, b) => b.localeCompare(a, undefined, { sensitivity: 'base' })));
 });`,
 
   209: `test('TC_AP_209 - Verify Bulk Upload And Create Buttons', async ({ mobileUsersPage }) => {
@@ -495,11 +523,15 @@ Object.assign(specs, {
 });`,
 
   210: `test('TC_AP_210 - Verify Groups Filter', async ({ mobileUsersPage }) => {
+  const group = await mobileUsersPage.getApiNonHqGroupWithMembers();
   await mobileUsersPage.openFilterModal();
   await mobileUsersPage.selectFilterTab('Groups');
-  await mobileUsersPage.toggleFilterCheckbox('Test');
+  await mobileUsersPage.toggleFilterCheckbox(group.name);
   await mobileUsersPage.applyFilter();
-  expect(await mobileUsersPage.getVisibleRowCount()).toBeGreaterThan(0);
+  const filtered = await mobileUsersPage.fetchMobileUsers({ filters: { userGroups: [group.code] } });
+  const rows = await mobileUsersPage.getVisibleRowCount();
+  expect(rows).toBeGreaterThan(0);
+  expect(rows).toBeLessThanOrEqual(filtered.total);
 });`,
 
   211: `test('TC_AP_211 - Verify Roles Filter', async ({ mobileUsersPage }) => {

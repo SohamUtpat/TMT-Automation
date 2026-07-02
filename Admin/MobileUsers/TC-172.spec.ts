@@ -8,7 +8,7 @@ test('TC_AP_172 - Verify Name Over 50 Shows Validation', async ({ mobileUsersPag
     await mobileUsersPage.fillCreateUserForm({
       firstName: TestDataGenerator.generateLongString(51),
     });
-    await mobileUsersPage.submitCreateUser();
+    await mobileUsersPage.submitCreateUser({ waitForApi: false });
   });
 
   await test.step('Verify max length validation message', async () => {

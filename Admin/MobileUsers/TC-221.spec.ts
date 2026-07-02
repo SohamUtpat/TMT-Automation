@@ -9,7 +9,7 @@ test('TC_AP_221 - Verify Password Over 15 Not Accepted', async ({ mobileUsersPag
       ...MobileUsersData.buildValidUser(),
       password: `${TestDataGenerator.generateLongString(16)}Aa1!`,
     });
-    await mobileUsersPage.submitCreateUser();
+    await mobileUsersPage.submitCreateUser({ waitForApi: false });
   });
 
   await test.step('Verify password length validation message', async () => {

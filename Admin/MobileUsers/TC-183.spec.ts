@@ -14,7 +14,7 @@ test('TC_AP_183 - Verify Doraku Code Max Length 20', async ({ mobileUsersPage })
 
   await test.step('Create user with 20-character Doraku code', async () => {
     await mobileUsersPage.fillCreateUserForm(user);
-    await mobileUsersPage.submitCreateUser();
+    await mobileUsersPage.submitCreateUser({ waitForApi: false });
     await mobileUsersPage.expectUserSavedSuccess();
   });
 });
