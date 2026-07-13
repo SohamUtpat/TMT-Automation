@@ -23,8 +23,6 @@ async function loginAsTestUser(page: Page, credentials: TestAdminCredentials) {
   await expect(page.locator('#username')).toBeVisible({ timeout: 30_000 });
   await login.login(credentials.userName, credentials.password);
 
-  // Some builds complete the login API call before the UI route updates.
-  // Force an authenticated landing page so #pageTitle becomes deterministic.
   await page.goto('/dashboard', { waitUntil: 'commit', timeout: 120_000 }).catch(() => undefined);
   await expect(page.locator('#pageTitle')).toBeVisible({ timeout: 60_000 });
 }
@@ -42,17 +40,22 @@ type WorkerFixtures = {
 
 export const test = base.extend<ChangePasswordFixtures, WorkerFixtures>({
   workerTestUser: [
-    async ({}, use) => {
-      // Use known-good credentials instead of depending on a dedicated admin-user create API.
-      // The suite mutates `testUser.password` when a password change succeeds.
-      const credentials: TestAdminCredentials = {
-        userName: loginData.validUser,
-        password: loginData.validPassword,
-        email: '',
-        firstName: '',
-        lastName: '',
-      };
-      await use(credentials);
+    async ({ browser }, use) => {
+      // Create a disposable admin via the main admin session — never use soham05 for password tests.
+      const adminContext = await browser.newContext({ storageState: authFile });
+      const adminPage = await adminContext.newPage();
+      const setupPage = new ChangePasswordPage(adminPage);
+      await adminPage.goto('/dashboard', { waitUntil: 'commit', timeout: 120_000 });
+      const credentials = await setupPage.createDedicatedTestAdminUser();
+
+      // Confirm the dedicated user can log in before any spec runs.
+      const verifyContext = await browser.newContext({ storageState: emptyStorageState });
+      const verifyPage = await verifyContext.newPage();
+      await loginAsTestUser(verifyPage, credentials);
+      await verifyContext.close();
+
+      await adminContext.close();
+      await use({ ...credentials });
     },
     { scope: 'worker' },
   ],

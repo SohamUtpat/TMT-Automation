@@ -1,5 +1,14 @@
+import { getApiBaseUrl } from '../config/appConfig';
 import { expect, type Locator, type Page } from '@playwright/test';
 import { ensureAuthenticated as restoreSession } from '../utils/ensureAuthenticated';
+
+type DashboardCounts = {
+  mobileUsers: number;
+  groups: number;
+  admins: number;
+  hqMembers: number;
+  usersCanDelete: number;
+};
 
 export class DashboardPage {
   readonly page: Page;
@@ -113,93 +122,71 @@ export class DashboardPage {
     return Number(text?.trim().replace(/,/g, ''));
   }
 
+  private dashboardCountsCache: DashboardCounts | null = null;
+
   private get apiBaseUrl(): string {
-    const base = (process.env.BASE_URL ?? 'http://18.142.102.68').replace(/\/$/, '');
-    return `${base}/api/user-management-service`;
+    return getApiBaseUrl();
   }
 
-  private extractTotalRecords(body: unknown): number {
-    if (!body || typeof body !== 'object') {
-      return 0;
+  private async fetchDashboardCounts(): Promise<DashboardCounts> {
+    if (this.dashboardCountsCache) {
+      return this.dashboardCountsCache;
     }
 
-    const record = body as Record<string, unknown>;
-    const metaData = record.metaData;
-
-    if (metaData && typeof metaData === 'object') {
-      const totalRecords = (metaData as { totalRecords?: unknown }).totalRecords;
-      if (typeof totalRecords === 'number') {
-        return totalRecords;
-      }
-    }
-
-    const nestedData = record.data;
-    if (nestedData && typeof nestedData === 'object' && !Array.isArray(nestedData)) {
-      const nestedTotal = this.extractTotalRecords(nestedData);
-      if (nestedTotal > 0) {
-        return nestedTotal;
-      }
-    }
-
-    if (typeof record.totalRecords === 'number') {
-      return record.totalRecords;
-    }
-
-    if (typeof record.total === 'number') {
-      return record.total;
-    }
-
-    return 0;
-  }
-
-  private async fetchTotalRecords(
-    path: string,
-    method: 'GET' | 'POST' = 'GET',
-    data: object = {},
-  ): Promise<number> {
     const token = await this.page.evaluate(() => localStorage.getItem('gulf_net_admin-token'));
-
-    const response = await this.page.request.fetch(`${this.apiBaseUrl}${path}`, {
-      method,
+    const response = await this.page.request.get(`${this.apiBaseUrl}/dashboard`, {
       headers: {
         Authorization: `Bearer ${token ?? ''}`,
-        'Content-Type': 'application/json',
         language: 'english',
         Accept: 'application/json, text/plain, */*',
       },
-      data: method === 'POST' ? data : undefined,
     });
 
     if (!response.ok()) {
-      throw new Error(`API ${method} ${path} failed with status ${response.status()}`);
+      throw new Error(`API GET /dashboard failed with status ${response.status()}`);
     }
 
     const body = await response.json();
-    return this.extractTotalRecords(body);
+    const dashboard = (body as { data?: { dashboard?: Record<string, unknown> } })?.data?.dashboard;
+
+    if (!dashboard || typeof dashboard !== 'object') {
+      throw new Error('API GET /dashboard returned an unexpected payload');
+    }
+
+    const readCount = (key: string): number => {
+      const value = dashboard[key];
+      return typeof value === 'number' ? value : Number(value ?? 0);
+    };
+
+    this.dashboardCountsCache = {
+      mobileUsers: readCount('totalMobileUsers'),
+      groups: readCount('totalGroups'),
+      admins: readCount('totalAdminUsers'),
+      hqMembers: readCount('totalHQMobileUsers'),
+      usersCanDelete: readCount('totalDeleteMobileUsers'),
+    };
+
+    return this.dashboardCountsCache;
   }
 
   async getApiMobileUsersCount(): Promise<number> {
-    return this.fetchTotalRecords('/user/mobile?page=0&size=25&search=', 'POST', {});
+    return (await this.fetchDashboardCounts()).mobileUsers;
   }
 
   async getApiGroupsCount(): Promise<number> {
-    return this.fetchTotalRecords('/group?page=0&size=25&search=', 'GET');
+    return (await this.fetchDashboardCounts()).groups;
   }
 
   async getApiAdminsCount(): Promise<number> {
-    return this.fetchTotalRecords('/user/admin?page=0&size=25&search=', 'POST', {});
+    return (await this.fetchDashboardCounts()).admins;
   }
 
   async getApiHqMembersCount(): Promise<number> {
-    return this.fetchTotalRecords('/user/mobile?page=0&size=25&search=', 'POST', {
-      userRoles: ['HQ'],
-    });
+    return (await this.fetchDashboardCounts()).hqMembers;
   }
 
   async getApiUsersCanDeleteCount(): Promise<number> {
-    return this.fetchTotalRecords('/user/mobile?page=0&size=25&search=', 'POST', {
-      userRoles: ['DELETE'],
-    });
+    return (await this.fetchDashboardCounts()).usersCanDelete;
   }
 
   async hoverOnGroup(index: number) {

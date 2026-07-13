@@ -1,11 +1,15 @@
 import { expect, type Locator, type Page } from '@playwright/test';
+import { getBaseUrl } from '../config/appConfig';
 import { ChangePasswordData } from '../data/ChangePasswordData';
 import { loginData } from '../data/loginData';
 import { ensureAuthenticated as restoreSession } from '../utils/ensureAuthenticated';
 
 export type TestAdminCredentials = {
   userName: string;
+  /** Current password — updated when a test successfully changes it. */
   password: string;
+  /** Original password set at user creation — never use the shared admin account. */
+  initialPassword: string;
   email: string;
   firstName: string;
   lastName: string;
@@ -73,24 +77,13 @@ export class ChangePasswordPage {
   }
 
   async resetAfterTest(credentials: TestAdminCredentials) {
-    const wantsPasswordRestore = credentials.password !== loginData.validPassword;
+    const needsPasswordRestore = credentials.password !== credentials.initialPassword;
     const onLoginPage = await this.page.locator('#username').isVisible().catch(() => false);
 
-    if (wantsPasswordRestore) {
-      // Password-change tests land on the login screen after success.
-      // Restore the default password so the next spec file can log in.
-      if (!onLoginPage) {
-        const loggedIn = await this.page.locator('#pageTitle').isVisible().catch(() => false);
-        if (!loggedIn) {
-          await this.page
-            .goto(loginData.baseUrl, { waitUntil: 'commit', timeout: 120_000 })
-            .catch(() => undefined);
-          await restoreSession(this.page, {
-            username: credentials.userName,
-            password: credentials.password,
-          });
-        }
-      } else {
+    if (needsPasswordRestore) {
+      // Successful password-change tests log out to the login screen.
+      if (onLoginPage || !(await this.page.locator('#pageTitle').isVisible().catch(() => false))) {
+        await this.page.goto(loginData.baseUrl, { waitUntil: 'commit', timeout: 120_000 }).catch(() => undefined);
         await restoreSession(this.page, {
           username: credentials.userName,
           password: credentials.password,
@@ -98,16 +91,12 @@ export class ChangePasswordPage {
       }
 
       await this.navigateToChangePassword();
-      await this.changePasswordComplete(credentials.password, loginData.validPassword);
-      credentials.password = loginData.validPassword;
+      await this.changePasswordComplete(credentials.password, credentials.initialPassword);
+      credentials.password = credentials.initialPassword;
       return;
     }
 
-    if (onLoginPage) return;
-
-    const loggedIn = await this.page.locator('#pageTitle').isVisible().catch(() => false);
-    if (!loggedIn) {
-      await this.page.goto(loginData.baseUrl, { waitUntil: 'commit', timeout: 120_000 }).catch(() => undefined);
+    if (onLoginPage) {
       await restoreSession(this.page, {
         username: credentials.userName,
         password: credentials.password,
@@ -122,148 +111,86 @@ export class ChangePasswordPage {
   // ── API: create dedicated admin test user with known password ───────────────
 
   private get apiBaseUrl(): string {
-    const base = (process.env.BASE_URL ?? 'http://18.142.102.68').replace(/\/$/, '');
+    const base = getBaseUrl();
     return `${base}/api/user-management-service`;
   }
 
+  private async getAuthHeaders(): Promise<Record<string, string>> {
+    const token = await this.page.evaluate(() => localStorage.getItem('gulf_net_admin-token'));
+    return {
+      Authorization: `Bearer ${token ?? ''}`,
+      language: 'english',
+      Accept: 'application/json, text/plain, */*',
+    };
+  }
+
+  /** Creates a disposable admin used only by the Change Password suite. */
   async createDedicatedTestAdminUser(): Promise<TestAdminCredentials> {
     const user = ChangePasswordData.buildTestAdminUser();
-    // Use a known-good password that we verified works with the real login flow.
-    // Some environments may accept different password formats for different user-create APIs.
-    const initialPassword = loginData.validPassword;
+    const initialPassword = user.password;
 
-    const result = await this.page.evaluate(
-      async ({ apiUrl, payload }) => {
-        const token = localStorage.getItem('gulf_net_admin-token');
-        const formData = new FormData();
-
-        for (const [key, value] of Object.entries(payload)) {
-          formData.append(key, value);
-        }
-
-        const response = await fetch(apiUrl, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token ?? ''}`,
-            language: 'english',
-          },
-          body: formData,
-        });
-
-        const contentType = response.headers.get('content-type') ?? '';
-        let bodyJson: unknown = undefined;
-        let bodyText: string = '';
-
-        if (contentType.includes('application/json')) {
-          bodyJson = await response.json().catch(() => undefined);
-          try {
-            bodyText = bodyJson === undefined ? '' : JSON.stringify(bodyJson);
-          } catch {
-            bodyText = '';
-          }
-        } else {
-          bodyText = await response.text();
-        }
-
-        return {
-          ok: response.ok,
-          status: response.status,
-          bodyText,
-          bodyJson,
-        };
+    const response = await this.page.request.post(`${this.apiBaseUrl}/user`, {
+      headers: await this.getAuthHeaders(),
+      multipart: {
+        userName: user.userName,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        phone: user.phone || '',
+        languagePreference: user.languagePreference,
+        dorakuEnable: 'false',
+        userRole: 'ADMIN',
+        appType: 'ADMIN',
+        status: '1',
+        password: initialPassword,
       },
-      {
-        apiUrl: `${this.apiBaseUrl}/user`,
-        payload: {
-          userName: user.userName,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          email: user.email,
-          phone: user.phone,
-          languagePreference: user.languagePreference,
-          dorakuEnable: 'false',
-          userRole: 'ADMIN',
-          appType: 'ADMIN',
-          status: '1',
-          password: initialPassword,
-        },
-      },
-    );
+    });
 
+    const body = await response.json().catch(() => ({}));
     const bodyStatus =
-      typeof result.bodyJson === 'object' && result.bodyJson !== null
-        ? (result.bodyJson as Record<string, unknown>).status
+      typeof body === 'object' && body !== null
+        ? (body as Record<string, unknown>).status
         : undefined;
-
     const jsonStatusFailed =
       bodyStatus !== undefined && bodyStatus !== 1 && bodyStatus !== '1' && bodyStatus !== true;
 
-    const creationRejected = !result.ok || jsonStatusFailed;
-    if (creationRejected) {
+    if (!response.ok() || jsonStatusFailed) {
       throw new Error(
-        `Create admin user API failed (httpOk=${result.ok}) with status ${result.status}. ` +
-          `jsonStatus=${String(bodyStatus)}. ` +
-          `bodyText=${String(result.bodyText).slice(0, 800)}. ` +
-          `bodyJson=${JSON.stringify(result.bodyJson).slice(0, 800)}`,
+        `Create dedicated admin user failed with HTTP ${response.status()}. ` +
+          `jsonStatus=${String(bodyStatus)}. body=${JSON.stringify(body).slice(0, 800)}`,
       );
     }
 
-    const looksLikeValidPassword = (candidate: unknown): candidate is string => {
-      if (typeof candidate !== 'string') return false;
-      // Matches the generator pattern: 8–15 chars, uppercase, lowercase, number, special.
-      return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,15}$/.test(candidate);
-    };
-
-    const bodyJson = result.bodyJson as Record<string, unknown> | null;
-    const candidateFromJson =
-      bodyJson?.password ??
-      bodyJson?.tempPassword ??
-      bodyJson?.temporaryPassword ??
-      bodyJson?.initialPassword;
-
-    const candidateFromText =
-      typeof result.bodyText === 'string'
-        ? result.bodyText.match(/(?:temp|temporary|initial|default)?password"\s*:\s*"([^"]+)"/i)?.[1] ??
-          result.bodyText.match(/(?:temp|temporary|initial|default)?password\s*=\s*([^\s,}]+)/i)?.[1]
-        : undefined;
-
-    const finalPasswordCandidate = candidateFromJson ?? candidateFromText;
-    const finalPassword = looksLikeValidPassword(finalPasswordCandidate)
-      ? finalPasswordCandidate
-      : initialPassword;
-
-    // Verify the user exists (creation APIs sometimes return HTTP 2xx even when the record isn't created).
-    const token = await this.page.evaluate(() => localStorage.getItem('gulf_net_admin-token'));
     const listResp = await this.page.request.fetch(
       `${this.apiBaseUrl}/user/admin?page=0&size=25&search=${encodeURIComponent(user.userName)}`,
       {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${token ?? ''}`,
+          ...(await this.getAuthHeaders()),
           'Content-Type': 'application/json',
-          language: 'english',
-          Accept: 'application/json, text/plain, */*',
         },
         data: {},
       },
     );
 
-    if (!listResp.ok) {
-      throw new Error(`Verify created admin user failed: list status=${listResp.status()}`);
+    if (!listResp.ok()) {
+      throw new Error(`Verify dedicated admin user failed: list status=${listResp.status()}`);
     }
 
     const listBody = await listResp.json().catch(() => undefined);
-    const userExists = typeof listBody === 'object' && listBody !== null && JSON.stringify(listBody).includes(user.userName);
+    const userExists =
+      typeof listBody === 'object' &&
+      listBody !== null &&
+      JSON.stringify(listBody).includes(user.userName);
+
     if (!userExists) {
-      throw new Error(
-        `Verify created admin user failed: userName not found in list response. ` +
-          `userName=${user.userName}`,
-      );
+      throw new Error(`Dedicated admin user not found after create: ${user.userName}`);
     }
 
     return {
       userName: user.userName,
-      password: finalPassword,
+      password: initialPassword,
+      initialPassword,
       email: user.email,
       firstName: user.firstName,
       lastName: user.lastName,

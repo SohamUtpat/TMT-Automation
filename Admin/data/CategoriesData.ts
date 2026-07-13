@@ -14,11 +14,22 @@ export const CategoriesData = {
   },
 
   validation: {
-    nameRequired: /required|cannot be empty|enter category name/i,
+    nameRequired: /required|cannot be empty|enter category name|name is required/i,
+    nameDuplicate: /already exists|duplicate|unique|taken/i,
+    nameSpecialChars: /special|invalid|not valid|alphanumeric|letters/i,
+    nameMaxLength: 50,
+    nameTooLong: /maximum|max|too long|characters|length/i,
+  },
+
+  search: {
+    noMatchTerm: `NoCatMatch${Date.now()}`,
   },
 
   deleteModal: {
-    confirmTitle: /delete category|are you sure/i,
+    confirmMessage: /are you sure you want to delete this category/i,
+    blockedTitle: 'Delete Group',
+    blockedMessage: /category cannot be deleted while groups are assigned/i,
+    blockedHint: /remove all assigned groups first/i,
   },
 
   messages: {

@@ -1,6 +1,6 @@
 import { chromium } from 'playwright';
 
-const base = (process.env.BASE_URL ?? 'http://18.142.102.68').replace(/\/$/, '');
+const base = (process.env.BASE_URL ?? 'https://admin.ntmt.dev.gulftmt.com').replace(/\/$/, '');
 const suffix = `${Date.now()}`;
 const password = `Tt@${String(suffix).slice(-5)}`.slice(0, 15);
 const userName = `user_${suffix}`;

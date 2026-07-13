@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test';
+import { getBaseUrl } from '../config/appConfig';
 import { FormsData } from '../data/FormsData';
 import { ensureAuthenticated as restoreSession } from '../utils/ensureAuthenticated';
 import type { ApiGroup } from './GroupsPage';
@@ -460,7 +461,7 @@ export class FormsPage {
   // ── API helpers ─────────────────────────────────────────────────────────────
 
   private get apiBaseUrl(): string {
-    const base = (process.env.BASE_URL ?? 'http://18.142.102.68').replace(/\/$/, '');
+    const base = getBaseUrl();
     return `${base}/api/user-management-service`;
   }
 
