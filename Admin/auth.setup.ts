@@ -2,34 +2,39 @@ import { test as setup, expect } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
 import { LoginPage } from './pages/LoginPage';
-import { isAuthStateValid } from './utils/authState';
+import { loginData } from './data/loginData';
 
 const authFile = path.join(__dirname, '../playwright/.auth/admin.json');
 
-async function hasActiveDashboardSession(page: import('@playwright/test').Page): Promise<boolean> {
-  await page.goto('/dashboard', { waitUntil: 'commit', timeout: 120_000 });
-
-  const onLogin = await page.locator('#username').isVisible().catch(() => false);
-  if (onLogin) {
-    return false;
-  }
-
-  return page.locator('#pageTitle').isVisible().catch(() => false);
-}
-
-setup('authenticate admin', async ({ page }) => {
+setup('authenticate admin', async ({ browser }) => {
+  // Allow slow bundle.js (~3+ min) plus login + dashboard shell.
+  setup.setTimeout(600_000);
   fs.mkdirSync(path.dirname(authFile), { recursive: true });
 
-  // If the saved auth token is still valid, reuse it.
-  // This avoids failing setup when the admin password has been changed by a test.
-  if (isAuthStateValid(authFile, 0)) {
-    await page.context().storageState({ path: authFile });
-    return;
+  // Fresh login on every Playwright run so stale JWTs from prior days are never reused.
+  const context = await browser.newContext();
+  const page = await context.newPage();
+
+  try {
+    const login = new LoginPage(page);
+
+    try {
+      await login.loginAsAdmin();
+    } catch (error) {
+      const onLogin = await page.locator('#username').isVisible().catch(() => false);
+      if (onLogin) {
+        throw new Error(
+          `authenticate admin failed for "${loginData.validUser}". ` +
+            `Verify VALID_USERNAME / VALID_PASSWORD in loginData.ts or env vars. ` +
+            `Original error: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+      throw error;
+    }
+
+    await expect(page.locator('#pageTitle')).toBeVisible({ timeout: 300_000 });
+    await context.storageState({ path: authFile });
+  } finally {
+    await context.close();
   }
-
-  const login = new LoginPage(page);
-  await login.loginAsAdmin();
-  await expect(page.locator('#pageTitle')).toBeVisible({ timeout: 60_000 });
-
-  await page.context().storageState({ path: authFile });
 });

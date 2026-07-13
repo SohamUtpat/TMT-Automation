@@ -3,7 +3,7 @@ import { chromium } from '@playwright/test';
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage();
 
-await page.goto('http://18.142.102.68');
+await page.goto(process.env.BASE_URL ?? 'https://admin.ntmt.dev.gulftmt.com');
 await page.locator('#username').fill('soham05');
 await page.locator('#password').fill('Josh@123');
 await page.locator('button.ant-btn-primary').click();

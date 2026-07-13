@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test';
+import { getApiBaseUrl } from '../config/appConfig';
 import { ensureAuthenticated as restoreSession } from '../utils/ensureAuthenticated';
 
 /** Groups table column indices — first column is the group icon. */
@@ -35,18 +36,16 @@ export class GroupsPage {
   }
 
   async navigateToGroups() {
-    if (!this.isOnGroupsListPage()) {
-      const groupApi = this.waitForGroupListResponse();
-      await this.page.goto('/groups', { waitUntil: 'commit', timeout: 60_000 });
-      await groupApi;
+    if (this.isOnGroupsListPage()) {
+      if (await this.createGroupButton().isVisible().catch(() => false)) {
+        await this.expectGroupsLoaded();
+        return;
+      }
     }
-    await this.ensureAuthenticated();
-    if (!this.isOnGroupsListPage()) {
-      const groupApi = this.waitForGroupListResponse();
-      await this.page.goto('/groups', { waitUntil: 'commit', timeout: 60_000 });
-      await groupApi;
-    }
-    await this.expectGroupsTitle();
+
+    await this.landOnDashboard();
+    await this.openGroupsFromShell();
+    await this.expectGroupsLoaded();
   }
 
   /** Re-login when storageState token was rejected and the app redirected to login. */
@@ -62,11 +61,15 @@ export class GroupsPage {
     }
 
     await this.ensureAuthenticated();
-    await this.expectGroupsTitle();
+    await this.expectGroupsLoaded();
   }
 
   async expectGroupsTitle() {
-    await expect(this.page.locator('#pageTitle')).toHaveText('Groups', { timeout: 15_000 });
+    await expect
+      .poll(async () => (await this.page.locator('#pageTitle').textContent())?.trim() ?? '', {
+        timeout: 90_000,
+      })
+      .toBe('Groups');
   }
 
   async expectGroupsLoaded() {
@@ -75,15 +78,80 @@ export class GroupsPage {
 
     if (loadingVisible) {
       await loading.waitFor({ state: 'hidden', timeout: 90_000 }).catch(async () => {
+        const groupApi = this.waitForGroupListResponse();
+        const bundle = this.waitForBundle();
         await this.page.reload({ waitUntil: 'commit', timeout: 120_000 });
-        await this.waitForGroupListResponse();
+        await Promise.all([groupApi, bundle]);
       });
     }
 
-    await expect(this.createGroupButton()).toBeVisible({ timeout: 30_000 });
-    await expect(this.page.locator('#pageTitle')).toHaveText('Groups', { timeout: 15_000 });
-    await expect(this.searchInput()).toBeVisible({ timeout: 15_000 });
-    await expect(this.table()).toBeVisible({ timeout: 15_000 });
+    await expect(this.searchInput()).toBeVisible({ timeout: 90_000 });
+    await this.expectGroupsTitle();
+    await expect(this.createGroupButton()).toBeVisible({ timeout: 60_000 });
+    await expect(this.table()).toBeVisible({ timeout: 30_000 });
+  }
+
+  private waitForBundle() {
+    return this.page
+      .waitForResponse((resp) => resp.url().includes('/bundle.js'), { timeout: 300_000 })
+      .catch(() => undefined);
+  }
+
+  private async landOnDashboard() {
+    await this.ensureAuthenticated();
+
+    if (
+      /\/dashboard(?:\/|$|\?)/.test(this.page.url()) &&
+      (await this.page.locator('#pageTitle').isVisible().catch(() => false))
+    ) {
+      return;
+    }
+
+    const dashboardApi = this.page
+      .waitForResponse(
+        (resp) => resp.url().includes('/dashboard') && resp.request().method() === 'GET',
+        { timeout: 120_000 },
+      )
+      .catch(() => undefined);
+    const bundle = this.waitForBundle();
+    await this.page.goto('/dashboard', { waitUntil: 'commit', timeout: 300_000 });
+    await Promise.all([dashboardApi, bundle]);
+    await this.ensureAuthenticated();
+    await this.page.locator('#pageTitle').waitFor({ state: 'visible', timeout: 300_000 });
+  }
+
+  private async openGroupsFromShell() {
+    if (this.isOnGroupsListPage() && (await this.createGroupButton().isVisible().catch(() => false))) {
+      return;
+    }
+
+    const groupApi = this.waitForGroupListResponse();
+    const groupsEntry = this.page
+      .locator('a[href="/groups"]')
+      .or(this.page.getByRole('link', { name: /^groups$/i }))
+      .first();
+
+    if (await groupsEntry.isVisible().catch(() => false)) {
+      await groupsEntry.click();
+    } else {
+      const totalGroupsCard = this.page.locator('.dashboard-item').filter({
+        has: this.page.locator('p.title', { hasText: 'Total Groups' }),
+      });
+      if (await totalGroupsCard.isVisible().catch(() => false)) {
+        await totalGroupsCard.click();
+      } else {
+        const bundle = this.waitForBundle();
+        await this.page.goto('/groups', { waitUntil: 'commit', timeout: 120_000 });
+        await bundle;
+      }
+    }
+
+    await groupApi;
+    await this.page
+      .locator('#pageTitle')
+      .filter({ hasText: 'Groups' })
+      .waitFor({ state: 'visible', timeout: 90_000 })
+      .catch(() => undefined);
   }
 
   private async isOnFirstPage(): Promise<boolean> {
@@ -224,7 +292,10 @@ export class GroupsPage {
   // ── Modal locators ─────────────────────────────────────────────────────────
 
   createModal = () =>
-    this.page.locator('.ant-modal').filter({ hasText: 'Create New Group' });
+    this.page
+      .locator('.ant-modal')
+      .filter({ hasText: 'Create New Group' })
+      .filter({ visible: true });
 
   editModal = () =>
     this.page.locator('.ant-modal').filter({ hasText: 'Edit Group Details' });
@@ -404,9 +475,10 @@ export class GroupsPage {
   }
 
   private async fillModalInput(input: Locator, value: string) {
+    await input.scrollIntoViewIfNeeded();
     await expect(input).toBeVisible({ timeout: 15_000 });
     await expect(input).toBeEnabled({ timeout: 15_000 });
-    await input.fill(value);
+    await input.fill(value, { force: true });
     await input.press('Tab');
   }
 
@@ -567,8 +639,7 @@ export class GroupsPage {
   // ── API helpers ─────────────────────────────────────────────────────────────
 
   private get apiBaseUrl(): string {
-    const base = (process.env.BASE_URL ?? 'http://18.142.102.68').replace(/\/$/, '');
-    return `${base}/api/user-management-service`;
+    return getApiBaseUrl();
   }
 
   private extractGroups(body: unknown): ApiGroup[] {

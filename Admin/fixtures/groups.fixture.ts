@@ -30,7 +30,7 @@ export const test = base.extend<GroupsFixtures, WorkerFixtures>({
       await groupsPage.navigateToGroups();
       await use(page);
     },
-    { scope: 'worker' },
+    { scope: 'worker', timeout: 240_000 },
   ],
 
   page: async ({ workerPage }, use) => {

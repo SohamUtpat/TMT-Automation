@@ -1,8 +1,11 @@
-export const loginData = {
-  baseUrl: process.env.BASE_URL ?? 'http://18.142.102.68',
+import { getBaseUrl } from '../config/appConfig';
 
-  validUser: process.env.VALID_USERNAME ?? 'soham05',
-  validPassword: process.env.VALID_PASSWORD ?? 'Josh@123',
+export const loginData = {
+  baseUrl: getBaseUrl(),
+
+  // Temporary credentials — revert to soham05 / Josh@123 when the main account is restored.
+  validUser: process.env.VALID_USERNAME ?? 'ADMIN',
+  validPassword: process.env.VALID_PASSWORD ?? 'ADMIN',
 
   invalidUser: 'invalidUser',
   invalidPassword: 'Wrong@123',

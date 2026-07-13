@@ -1,5 +1,6 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import path from 'path';
+import { getBaseUrl } from '../config/appConfig';
 import { MobileUsersData } from '../data/MobileUsersData';
 import type { ApiGroup } from './GroupsPage';
 import { ensureAuthenticated as restoreSession, isOnLoginPage } from '../utils/ensureAuthenticated';
@@ -383,7 +384,7 @@ export class MobileUsersPage {
   // ── API helpers ───────────────────────────────────────────────────────────
 
   private get apiBaseUrl(): string {
-    const base = (process.env.BASE_URL ?? 'http://18.142.102.68').replace(/\/$/, '');
+    const base = getBaseUrl();
     return `${base}/api/user-management-service`;
   }
 

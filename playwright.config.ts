@@ -1,5 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 import path from 'path';
+import { getBaseUrl } from './Admin/config/appConfig';
 
 const authFile = path.join(__dirname, 'playwright/.auth/admin.json');
 
@@ -14,8 +15,8 @@ export default defineConfig({
   timeout: 120_000,
   reporter: [['html', { open: 'never' }], ['list']],
   use: {
-    baseURL: process.env.BASE_URL ?? 'http://18.142.102.68',
-    navigationTimeout: 120_000,
+    baseURL: getBaseUrl(),
+    navigationTimeout: 300_000,
     actionTimeout: 30_000,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
@@ -25,6 +26,8 @@ export default defineConfig({
     {
       name: 'setup',
       testMatch: /auth\.setup\.ts/,
+      // Slow bundle.js can take ~3+ minutes; allow full login + dashboard.
+      timeout: 600_000,
     },
     {
       name: 'login',

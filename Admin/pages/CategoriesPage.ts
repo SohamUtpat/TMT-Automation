@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test';
+import { getApiBaseUrl } from '../config/appConfig';
 import { CategoriesData } from '../data/CategoriesData';
 import { ensureAuthenticated as restoreSession } from '../utils/ensureAuthenticated';
 import type { ApiGroup } from './GroupsPage';
@@ -160,13 +161,22 @@ export class CategoriesPage {
 
   deleteConfirmModal = () =>
     this.page.locator('.common-modal-box, .ant-modal').filter({
-      hasText: CategoriesData.deleteModal.confirmTitle,
+      hasText: CategoriesData.deleteModal.confirmMessage,
+    });
+
+  deleteBlockedModal = () =>
+    this.page.locator('.common-modal-box, .ant-modal').filter({
+      hasText: CategoriesData.deleteModal.blockedMessage,
     });
 
   toast = (text: string | RegExp) => this.page.locator('.ant-message-notice-content').filter({ hasText: text });
 
   fieldError = (text: string | RegExp) =>
-    this.page.locator('.ant-form-item-explain-error, [class*="error"]').filter({ hasText: text });
+    this.page.locator('.ant-form-item-explain-error, [class*="error"], [class*="info"]').filter({
+      hasText: text,
+    });
+
+  emptyTable = () => this.page.locator('.ant-empty, .ant-table-placeholder');
 
   // ── Create / Edit form locators ─────────────────────────────────────────────
 
@@ -178,6 +188,10 @@ export class CategoriesPage {
 
   groupsSelect = () =>
     this.page.locator('.ant-select').filter({ has: this.page.getByPlaceholder(/select groups/i) });
+
+  groupsDropdown = () => this.page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)');
+
+  assignedGroupTags = () => this.page.locator('.ant-select-selection-item, .ant-tag');
 
   createButton = () => this.page.getByRole('button', { name: /^create$/i });
 
@@ -362,7 +376,7 @@ export class CategoriesPage {
     }
   }
 
-  async assignGroupFromDropdown(group: { code: string; name: string }) {
+  async openGroupsDropdownAndSearch(query: string) {
     await this.groupsSelect().click();
     const searchInput = this.page.locator('.ant-select-selection-search-input');
     const groupApi = this.page
@@ -370,13 +384,57 @@ export class CategoriesPage {
         timeout: 30_000,
       })
       .catch(() => undefined);
-    await searchInput.fill(group.code);
+    await searchInput.fill(query);
     await groupApi;
-    const dropdown = this.page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)');
+    await expect(this.groupsDropdown()).toBeVisible({ timeout: 15_000 });
+  }
+
+  async assignGroupFromDropdown(group: { code: string; name: string }) {
+    await this.openGroupsDropdownAndSearch(group.code);
+    const dropdown = this.groupsDropdown();
     const checkbox = dropdown.getByRole('checkbox', { name: `${group.code}-${group.name}` });
     await expect(checkbox).toBeVisible({ timeout: 15_000 });
     await checkbox.click();
     await dropdown.getByRole('button', { name: /Add/i }).click();
+  }
+
+  /** Select a group checkbox but close without clicking Add. */
+  async selectGroupWithoutAdding(group: { code: string; name: string }) {
+    await this.openGroupsDropdownAndSearch(group.code);
+    const dropdown = this.groupsDropdown();
+    const checkbox = dropdown.getByRole('checkbox', { name: `${group.code}-${group.name}` });
+    await expect(checkbox).toBeVisible({ timeout: 15_000 });
+    await checkbox.click();
+    await this.page.keyboard.press('Escape');
+  }
+
+  async removeAssignedGroupTag(index = 0) {
+    const tag = this.assignedGroupTags().nth(index);
+    await expect(tag).toBeVisible({ timeout: 15_000 });
+    const remove = tag.locator('.anticon-close, .ant-select-selection-item-remove, [aria-label="remove"]');
+    if ((await remove.count()) > 0) {
+      await remove.first().click();
+      return;
+    }
+    await tag.click({ force: true });
+  }
+
+  async expectValidationMessage(text: string | RegExp) {
+    const fieldError = this.fieldError(text);
+    const toast = this.toast(text);
+    await expect(fieldError.first().or(toast.first())).toBeVisible({ timeout: 15_000 });
+  }
+
+  async expectNoMatchingCategories() {
+    const rowCount = await this.tableRows().count();
+    const emptyVisible = await this.emptyTable().isVisible().catch(() => false);
+    expect(rowCount === 0 || emptyVisible).toBe(true);
+  }
+
+  async expectStillOnCreateOrEditForm() {
+    const onCreate = this.isOnCreatePage();
+    const onEdit = this.isOnEditPage();
+    expect(onCreate || onEdit).toBe(true);
   }
 
   async submitCreate() {
@@ -425,11 +483,10 @@ export class CategoriesPage {
 
   async openEditCategory(categoryName: string) {
     await this.editButton(categoryName).click();
-    await expect(this.page.locator('#pageTitle')).toHaveText(
-      new RegExp(CategoriesData.editPageTitle, 'i'),
-      { timeout: 30_000 },
-    );
+    await expect(this.updateButton()).toBeVisible({ timeout: 30_000 });
     await expect(this.nameInput()).toBeVisible({ timeout: 15_000 });
+    await expect(this.descriptionInput()).toBeVisible({ timeout: 15_000 });
+    await expect(this.groupsSelect()).toBeVisible({ timeout: 15_000 });
   }
 
   async updateCategoryName(newName: string) {
@@ -461,6 +518,37 @@ export class CategoriesPage {
     await this.deleteConfirmModal().getByRole('button', { name: /^cancel$/i }).click();
   }
 
+  async dismissDeleteBlocked() {
+    await this.deleteBlockedModal().getByRole('button', { name: /^ok$/i }).click();
+  }
+
+  async deleteCategoryIfPossible(categoryName: string) {
+    const groupCount = await this.getAssignedGroupCount(categoryName).catch(() => -1);
+    if (groupCount !== 0) {
+      return;
+    }
+
+    await this.deleteCategory(categoryName).catch(() => undefined);
+  }
+
+  async getApiCategoryWithAssignedGroups(): Promise<ApiCategory> {
+    const { categories } = await this.fetchCategoriesFromApi({ size: 50 });
+    const withGroups = categories.find((category) => category.assignedGroupCount > 0);
+
+    if (!withGroups) {
+      throw new Error('No category with assigned groups found from API');
+    }
+
+    return withGroups;
+  }
+
+  async prepareCategoryWithGroupsFromApi(): Promise<ApiCategory> {
+    const category = await this.getApiCategoryWithAssignedGroups();
+    await this.searchCategories(category.name);
+    await this.expectCategoryVisible(category.name);
+    return category;
+  }
+
   async deleteCategory(categoryName: string) {
     await this.clickDeleteCategory(categoryName);
     await expect(this.deleteConfirmModal()).toBeVisible({ timeout: 15_000 });
@@ -471,8 +559,7 @@ export class CategoriesPage {
   // ── API helpers ─────────────────────────────────────────────────────────────
 
   private get apiBaseUrl(): string {
-    const base = (process.env.BASE_URL ?? 'http://18.142.102.68').replace(/\/$/, '');
-    return `${base}/api/user-management-service`;
+    return getApiBaseUrl();
   }
 
   private async getAuthHeaders(): Promise<Record<string, string>> {

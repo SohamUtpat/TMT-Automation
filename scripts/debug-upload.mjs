@@ -4,7 +4,7 @@ import path from 'path';
 const browser = await chromium.launch({ headless: true });
 const ctx = await browser.newContext({
   storageState: 'playwright/.auth/admin.json',
-  baseURL: 'http://18.142.102.68',
+  baseURL: process.env.BASE_URL ?? 'https://admin.ntmt.dev.gulftmt.com',
 });
 const page = await ctx.newPage();
 await page.goto('/groups', { waitUntil: 'commit' });

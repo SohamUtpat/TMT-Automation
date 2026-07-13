@@ -25,22 +25,31 @@ export class LoginPage {
   }
 
   private isLoginApiResponse(url: string, method: string): boolean {
-    return method === 'POST' && url.includes('/api/user-management-service/admin/login');
+    return method === 'POST' && /\/user-management-service\/.*login/i.test(url);
   }
 
-  private waitForLoginApi(): Promise<Response> {
-    return this.page.waitForResponse(
-      (resp) => this.isLoginApiResponse(resp.url(), resp.request().method()),
-      { timeout: 10_000 },
-    );
+  private waitForLoginApi(): Promise<Response | undefined> {
+    return this.page
+      .waitForResponse(
+        (resp) => this.isLoginApiResponse(resp.url(), resp.request().method()),
+        { timeout: 120_000 },
+      )
+      .catch(() => undefined);
   }
 
   async navigate() {
+    // bundle.js can take ~3+ minutes on a slow env; keep waits above that.
+    const bundleLoaded = this.page
+      .waitForResponse((resp) => resp.url().includes('/bundle.js'), { timeout: 300_000 })
+      .catch(() => undefined);
+
     await this.page.goto(loginData.baseUrl, {
       waitUntil: 'commit',
-      timeout: 60_000,
+      timeout: 300_000,
     });
-    await this.username.waitFor({ state: 'visible', timeout: 30_000 });
+
+    await bundleLoaded;
+    await this.username.waitFor({ state: 'visible', timeout: 300_000 });
   }
 
   private async clearLoginForm() {
@@ -83,6 +92,19 @@ export class LoginPage {
     await this.ensureLoginScreen();
   }
 
+  private async clearBrowserStorage() {
+    await this.page
+      .evaluate(() => {
+        try {
+          localStorage.clear();
+          sessionStorage.clear();
+        } catch {
+          // Ignore on about:blank or other documents that block storage access.
+        }
+      })
+      .catch(() => undefined);
+  }
+
   async ensureLoginScreen() {
     if (await this.isOnCleanLoginScreen()) {
       await this.dismissErrorMessages();
@@ -92,11 +114,13 @@ export class LoginPage {
     const usernameVisible = await this.username.isVisible().catch(() => false);
     const loggedIn = await this.page.locator('#pageTitle').isVisible().catch(() => false);
 
-    if (loggedIn || !usernameVisible) {
-      await this.page.evaluate(() => {
-        localStorage.clear();
-        sessionStorage.clear();
-      });
+    if (loggedIn) {
+      await this.clearBrowserStorage();
+      await this.navigate();
+      return;
+    }
+
+    if (!usernameVisible) {
       await this.navigate();
       return;
     }
@@ -109,10 +133,7 @@ export class LoginPage {
     const loggedIn = await this.page.locator('#pageTitle').isVisible().catch(() => false);
 
     if (loggedIn) {
-      await this.page.evaluate(() => {
-        localStorage.clear();
-        sessionStorage.clear();
-      });
+      await this.clearBrowserStorage();
       await this.navigate();
       return;
     }
@@ -127,16 +148,46 @@ export class LoginPage {
     await this.loginBtn.click();
   }
 
+  private async waitForLoginOutcome(): Promise<'logged-in' | 'dashboard' | 'error' | 'pending'> {
+    const errorToast = this.errorMessage.first();
+    return Promise.race([
+      this.page.locator('#pageTitle').waitFor({ state: 'visible', timeout: 300_000 }).then(() => 'logged-in' as const),
+      this.page.waitForURL(/\/dashboard/, { timeout: 300_000 }).then(() => 'dashboard' as const),
+      errorToast.waitFor({ state: 'visible', timeout: 30_000 }).then(() => 'error' as const),
+    ]).catch(() => 'pending' as const);
+  }
+
   async login(username: string, password: string) {
     const loginResponse = this.waitForLoginApi();
     await this.submitLoginForm(username, password);
     await loginResponse;
+    return this.waitForLoginOutcome();
   }
 
   async loginAsAdmin() {
     await this.navigate();
-    await this.login(loginData.validUser, loginData.validPassword);
-    await this.page.locator('#pageTitle').waitFor({ state: 'visible', timeout: 30_000 });
+    const outcome = await this.login(loginData.validUser, loginData.validPassword);
+
+    if (outcome === 'error') {
+      throw new Error(
+        `Admin login failed for "${loginData.validUser}". Check VALID_USERNAME / VALID_PASSWORD.`,
+      );
+    }
+
+    if (outcome !== 'logged-in' && outcome !== 'dashboard') {
+      throw new Error(`Admin login failed with outcome: ${outcome}`);
+    }
+
+    if (!/\/dashboard(?:\/|$|\?)/.test(this.page.url())) {
+      const dashboardLoaded = this.page.waitForResponse(
+        (resp) => resp.url().includes('/dashboard') && resp.request().method() === 'GET',
+        { timeout: 120_000 },
+      );
+      await this.page.goto('/dashboard', { waitUntil: 'commit', timeout: 300_000 });
+      await dashboardLoaded.catch(() => undefined);
+    }
+
+    await this.page.locator('#pageTitle').waitFor({ state: 'visible', timeout: 300_000 });
   }
 
   async expectLoggedIn() {
