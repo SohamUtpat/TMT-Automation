@@ -5,9 +5,28 @@ export const SettingsData = {
   pageTitle: 'Settings',
 
   languages: {
-    english: { label: 'English', code: 'eng', dashboardTitle: 'Dashboard' },
-    thai: { label: 'ภาษาไทย', code: 'thai', dashboardTitle: 'เมนู - แดชบอร์ด' },
-    japanese: { label: '日本語', code: 'jpn', dashboardTitle: 'メニュー - ダッシュボード' },
+    english: {
+      label: 'English',
+      code: 'eng',
+      dashboardTitle: 'Dashboard',
+      settingsTitle: 'Settings',
+      displayedLabel: 'English',
+    },
+    thai: {
+      label: 'ภาษาไทย',
+      code: 'thai',
+      dashboardTitle: 'เมนู - แดชบอร์ด',
+      settingsTitle: 'ตั้งค่า',
+      // Settings list renders i18next.t('thai') while admin UI stays English.
+      displayedLabel: 'แบบไทย',
+    },
+    japanese: {
+      label: '日本語',
+      code: 'jpn',
+      dashboardTitle: 'メニュー - ダッシュボード',
+      settingsTitle: '設定',
+      displayedLabel: '日本語',
+    },
   },
 
   supportFields: ['URL', 'Email', 'Contact Details', 'Language'] as const,
@@ -36,8 +55,8 @@ export const SettingsData = {
   },
 
   messages: {
-    saved: 'Data saved successfully',
-    stampDeleted: 'Stamp deleted successfully',
+    saved: /Data saved successfully|更新完了|อัปเดตแล้ว/i,
+    stampDeleted: /Stamp deleted successfully|スタンプが削除されました|แสตมป์ถูกลบแล้ว/i,
     stampUploaded: /stamp uploaded successfully/i,
   },
 
@@ -51,7 +70,7 @@ export const SettingsData = {
     const suffix = Date.now();
     return {
       url: `https://support-${suffix}.example.com`,
-      email: `support_${suffix}@autotest.local`,
+      email: `support_${suffix}@example.com`,
       contact: `9${String(suffix).slice(-9).padStart(9, '0')}`,
       language: SettingsData.languages.english.code,
       ...overrides,

@@ -86,6 +86,9 @@ test('TC_AP_290 - Verify Graph User Counts', async ({ dashboardPage }) => {
 });
 
 test('TC_AP_291 - Verify Bar Graph Fields', async ({ dashboardPage }) => {
+  const groupLabels = await dashboardPage.getGraphGroupLabels();
+  expect(groupLabels.length).toBeGreaterThan(0);
+
   await dashboardPage.hoverOnGroup(0);
   const tooltip = await dashboardPage.getTooltipText();
 
@@ -93,6 +96,7 @@ test('TC_AP_291 - Verify Bar Graph Fields', async ({ dashboardPage }) => {
     expect(tooltip).toContain(field);
   }
 
-  const hasGroupName = DashboardData.sampleGroups.some((group) => tooltip.includes(group));
-  expect(hasGroupName).toBeTruthy();
+  // X-axis may truncate labels with "..."; match the visible prefix in the tooltip.
+  const hoveredLabel = groupLabels[0].replace(/\.{2,}$/, '').trim();
+  expect(tooltip).toContain(hoveredLabel);
 });

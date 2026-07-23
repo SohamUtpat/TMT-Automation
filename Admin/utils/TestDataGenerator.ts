@@ -20,7 +20,7 @@ export class TestDataGenerator {
   }
 
   static generateUniqueEmail(): string {
-    return `user_${this.suffix()}@autotest.local`;
+    return `t${this.randomLetters(8).toLowerCase()}@gmail.com`;
   }
 
   static generateUniqueMobile(): string {

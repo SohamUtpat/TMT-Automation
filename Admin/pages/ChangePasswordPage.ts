@@ -1,5 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test';
-import { getBaseUrl } from '../config/appConfig';
+import { getApiBaseUrl } from '../config/appConfig';
 import { ChangePasswordData } from '../data/ChangePasswordData';
 import { loginData } from '../data/loginData';
 import { ensureAuthenticated as restoreSession } from '../utils/ensureAuthenticated';
@@ -111,8 +111,7 @@ export class ChangePasswordPage {
   // ── API: create dedicated admin test user with known password ───────────────
 
   private get apiBaseUrl(): string {
-    const base = getBaseUrl();
-    return `${base}/api/user-management-service`;
+    return getApiBaseUrl();
   }
 
   private async getAuthHeaders(): Promise<Record<string, string>> {
@@ -122,6 +121,35 @@ export class ChangePasswordPage {
       language: 'english',
       Accept: 'application/json, text/plain, */*',
     };
+  }
+
+  private async setDedicatedAdminPassword(userName: string, password: string) {
+    const response = await this.page.request.post(
+      `${this.apiBaseUrl}/reset-password-by-admin?version=2`,
+      {
+        headers: {
+          ...(await this.getAuthHeaders()),
+          'Content-Type': 'application/json',
+        },
+        data: {
+          userName,
+          changePassword: password,
+          confirmPassword: password,
+        },
+      },
+    );
+    const body = await response.json().catch(() => ({}));
+    const errors =
+      typeof body === 'object' && body !== null
+        ? (body as Record<string, unknown>).errors
+        : undefined;
+
+    if (!response.ok() || (Array.isArray(errors) && errors.length > 0)) {
+      throw new Error(
+        `Set dedicated admin password failed with HTTP ${response.status()}. ` +
+          `body=${JSON.stringify(body).slice(0, 800)}`,
+      );
+    }
   }
 
   /** Creates a disposable admin used only by the Change Password suite. */
@@ -153,11 +181,17 @@ export class ChangePasswordPage {
         : undefined;
     const jsonStatusFailed =
       bodyStatus !== undefined && bodyStatus !== 1 && bodyStatus !== '1' && bodyStatus !== true;
+    const responseErrors =
+      typeof body === 'object' && body !== null
+        ? (body as Record<string, unknown>).errors
+        : undefined;
+    const hasResponseErrors = Array.isArray(responseErrors) && responseErrors.length > 0;
 
-    if (!response.ok() || jsonStatusFailed) {
+    if (!response.ok() || jsonStatusFailed || hasResponseErrors) {
       throw new Error(
         `Create dedicated admin user failed with HTTP ${response.status()}. ` +
-          `jsonStatus=${String(bodyStatus)}. body=${JSON.stringify(body).slice(0, 800)}`,
+          `jsonStatus=${String(bodyStatus)}. email=${user.email}. ` +
+          `body=${JSON.stringify(body).slice(0, 800)}`,
       );
     }
 
@@ -184,8 +218,14 @@ export class ChangePasswordPage {
       JSON.stringify(listBody).includes(user.userName);
 
     if (!userExists) {
-      throw new Error(`Dedicated admin user not found after create: ${user.userName}`);
+      throw new Error(
+        `Dedicated admin user not found after create: ${user.userName}. ` +
+          `createBody=${JSON.stringify(body).slice(0, 800)}. ` +
+          `listBody=${JSON.stringify(listBody).slice(0, 800)}`,
+      );
     }
+
+    await this.setDedicatedAdminPassword(user.userName, initialPassword);
 
     return {
       userName: user.userName,

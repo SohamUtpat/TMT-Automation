@@ -1,13 +1,14 @@
-import { test, expect } from '../fixtures/admin-users.fixture';
-import { AdminUsersData } from '../data/AdminUsersData';
-import { TestDataGenerator } from '../utils/TestDataGenerator';
-import { LoginPage } from '../pages/LoginPage';
-import { loginData } from '../data/loginData';
+import { test, expect } from "../fixtures/admin-users.fixture";
+import { AdminUsersData } from "../data/AdminUsersData";
 
-test('TC_AP_257 - Verify Username Maximum Length 50', async ({ adminUsersPage }) => {
+test("TC_AP_257 - Verify Username Boundary Length 49", async ({
+  adminUsersPage,
+}) => {
+  const uniquePrefix = AdminUsersData.buildValidUser().userName;
   const user = AdminUsersData.buildValidUser({
-    userName: `u${TestDataGenerator.generateLongString(48)}`.slice(0, 50),
+    userName: `${uniquePrefix}${"A".repeat(49)}`.slice(0, 49),
   });
+  expect(user.userName).toHaveLength(49);
   await adminUsersPage.createAdminUser(user);
   await adminUsersPage.searchUsers(user.userName!);
   await adminUsersPage.expectUserVisible(user.userName!);

@@ -36,6 +36,10 @@ export class GroupsPage {
   }
 
   async navigateToGroups() {
+    if (await this.isGroupsListReady()) {
+      return;
+    }
+
     if (this.isOnGroupsListPage()) {
       if (await this.createGroupButton().isVisible().catch(() => false)) {
         await this.expectGroupsLoaded();
@@ -53,23 +57,52 @@ export class GroupsPage {
     await restoreSession(this.page);
   }
 
-  /** Fast path when the shared worker page is already on a ready Groups list. */
+  /** True when Groups list chrome is already visible (no long waits). */
+  async isGroupsListReady(): Promise<boolean> {
+    if (!this.isOnGroupsListPage()) return false;
+    const [search, create, table] = await Promise.all([
+      this.searchInput().isVisible().catch(() => false),
+      this.createGroupButton().isVisible().catch(() => false),
+      this.table().isVisible().catch(() => false),
+    ]);
+    return search && create && table;
+  }
+
+  /**
+   * Fast path when the shared worker page is already on a ready Groups list.
+   * Avoids re-running the full 60s readiness waits on every test.
+   */
   async ensureGroupsReady() {
+    if (await this.isGroupsListReady()) {
+      return;
+    }
+
     if (!this.isOnGroupsListPage()) {
       await this.navigateToGroups();
       return;
     }
 
     await this.ensureAuthenticated();
+    if (await this.isGroupsListReady()) {
+      return;
+    }
     await this.expectGroupsLoaded();
   }
 
   async expectGroupsTitle() {
     await expect
       .poll(async () => (await this.page.locator('#pageTitle').textContent())?.trim() ?? '', {
-        timeout: 90_000,
+        timeout: 60_000,
       })
       .toBe('Groups');
+  }
+
+  private async describeGroupsLoadFailure(): Promise<string> {
+    const url = this.page.url();
+    const title = (await this.page.locator('#pageTitle').textContent().catch(() => null))?.trim() ?? '(no #pageTitle)';
+    const onLogin = await this.page.locator('#username').isVisible().catch(() => false);
+    const loading = await this.page.getByText('Loading...', { exact: true }).isVisible().catch(() => false);
+    return `Groups page did not become ready. url=${url} title="${title}" onLogin=${onLogin} loading=${loading}`;
   }
 
   async expectGroupsLoaded() {
@@ -77,23 +110,28 @@ export class GroupsPage {
     const loadingVisible = await loading.isVisible().catch(() => false);
 
     if (loadingVisible) {
-      await loading.waitFor({ state: 'hidden', timeout: 90_000 }).catch(async () => {
+      await loading.waitFor({ state: 'hidden', timeout: 60_000 }).catch(async () => {
         const groupApi = this.waitForGroupListResponse();
         const bundle = this.waitForBundle();
-        await this.page.reload({ waitUntil: 'commit', timeout: 120_000 });
+        await this.page.reload({ waitUntil: 'commit', timeout: 90_000 });
         await Promise.all([groupApi, bundle]);
       });
     }
 
-    await expect(this.searchInput()).toBeVisible({ timeout: 90_000 });
+    try {
+      await expect(this.searchInput()).toBeVisible({ timeout: 60_000 });
+    } catch (error) {
+      throw new Error(`${await this.describeGroupsLoadFailure()}\n${String(error)}`);
+    }
+
     await this.expectGroupsTitle();
     await expect(this.createGroupButton()).toBeVisible({ timeout: 60_000 });
-    await expect(this.table()).toBeVisible({ timeout: 30_000 });
+    await expect(this.table()).toBeVisible({ timeout: 45_000 });
   }
 
   private waitForBundle() {
     return this.page
-      .waitForResponse((resp) => resp.url().includes('/bundle.js'), { timeout: 300_000 })
+      .waitForResponse((resp) => resp.url().includes('/bundle.js'), { timeout: 120_000 })
       .catch(() => undefined);
   }
 
@@ -110,14 +148,14 @@ export class GroupsPage {
     const dashboardApi = this.page
       .waitForResponse(
         (resp) => resp.url().includes('/dashboard') && resp.request().method() === 'GET',
-        { timeout: 120_000 },
+        { timeout: 90_000 },
       )
       .catch(() => undefined);
     const bundle = this.waitForBundle();
-    await this.page.goto('/dashboard', { waitUntil: 'commit', timeout: 300_000 });
+    await this.page.goto('/dashboard', { waitUntil: 'commit', timeout: 120_000 });
     await Promise.all([dashboardApi, bundle]);
     await this.ensureAuthenticated();
-    await this.page.locator('#pageTitle').waitFor({ state: 'visible', timeout: 300_000 });
+    await this.page.locator('#pageTitle').waitFor({ state: 'visible', timeout: 120_000 });
   }
 
   private async openGroupsFromShell() {
@@ -129,6 +167,7 @@ export class GroupsPage {
     const groupsEntry = this.page
       .locator('a[href="/groups"]')
       .or(this.page.getByRole('link', { name: /^groups$/i }))
+      .or(this.page.getByRole('menuitem', { name: /^groups$/i }))
       .first();
 
     if (await groupsEntry.isVisible().catch(() => false)) {
@@ -141,7 +180,7 @@ export class GroupsPage {
         await totalGroupsCard.click();
       } else {
         const bundle = this.waitForBundle();
-        await this.page.goto('/groups', { waitUntil: 'commit', timeout: 120_000 });
+        await this.page.goto('/groups', { waitUntil: 'commit', timeout: 90_000 });
         await bundle;
       }
     }
@@ -150,7 +189,7 @@ export class GroupsPage {
     await this.page
       .locator('#pageTitle')
       .filter({ hasText: 'Groups' })
-      .waitFor({ state: 'visible', timeout: 90_000 })
+      .waitFor({ state: 'visible', timeout: 60_000 })
       .catch(() => undefined);
   }
 
@@ -202,7 +241,13 @@ export class GroupsPage {
 
   createGroupButton = () => this.page.getByRole('button', { name: 'Create Group' });
 
-  searchInput = () => this.page.getByPlaceholder('Search');
+  /** Prefer English placeholder; fall back to Groups search box CSS if i18n differs. */
+  searchInput = () =>
+    this.page
+      .getByPlaceholder('Search')
+      .or(this.page.locator('.search-box-container input'))
+      .or(this.page.locator('.ant-input-search input').first())
+      .first();
 
   table = () => this.page.locator('.ant-table');
 

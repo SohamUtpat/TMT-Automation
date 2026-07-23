@@ -6,3 +6,9 @@ node_modules/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+
+# Local env (keep examples committed)
+.env
+.env.local
+!.env.example
+!.env.local.example

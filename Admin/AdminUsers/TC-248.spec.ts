@@ -1,10 +1,7 @@
-import { test, expect } from '../fixtures/admin-users.fixture';
-import { AdminUsersData } from '../data/AdminUsersData';
-import { TestDataGenerator } from '../utils/TestDataGenerator';
-import { LoginPage } from '../pages/LoginPage';
-import { loginData } from '../data/loginData';
+import { test, expect } from "../fixtures/admin-users.fixture";
+import { AdminUsersData } from "../data/AdminUsersData";
 
-test('TC_AP_248 - Verify Usernames Are Unique', async ({ adminUsersPage }) => {
+test("TC_AP_248 - Verify Usernames Are Unique", async ({ adminUsersPage }) => {
   const user = AdminUsersData.buildValidUser();
   await adminUsersPage.createAdminUser(user);
 
@@ -13,6 +10,17 @@ test('TC_AP_248 - Verify Usernames Are Unique', async ({ adminUsersPage }) => {
     ...AdminUsersData.buildValidUser(),
     userName: user.userName,
   });
+  const duplicateResponsePromise = adminUsersPage.page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      /\/user-management-service\/user(?:\?|$)/.test(response.url()),
+  );
   await adminUsersPage.submitCreateUser({ waitForApi: false });
-  await expect(adminUsersPage.page.locator('.ant-modal, .create-user-form-div, .admin-submit-button').first()).toBeVisible();
+  const duplicateResponse = await duplicateResponsePromise;
+  expect(await duplicateResponse.text()).toMatch(
+    /user.*(?:already|exist|duplicate)|(?:already|exist|duplicate).*user/i,
+  );
+  await expect(adminUsersPage.page).toHaveURL(
+    new RegExp(`${AdminUsersData.paths.create}$`),
+  );
 });
