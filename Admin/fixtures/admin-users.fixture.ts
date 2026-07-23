@@ -1,8 +1,8 @@
-import { test as base, type BrowserContext, type Page } from '@playwright/test';
-import path from 'path';
-import { AdminUsersPage } from '../pages/AdminUsersPage';
+import { test as base, type BrowserContext, type Page } from "@playwright/test";
+import path from "path";
+import { AdminUsersPage } from "../pages/AdminUsersPage";
 
-const authFile = path.join(__dirname, '../../playwright/.auth/admin.json');
+const authFile = path.join(__dirname, "../../playwright/.auth/admin.json");
 
 type AdminUsersFixtures = {
   adminUsersPage: AdminUsersPage;
@@ -20,7 +20,7 @@ export const test = base.extend<AdminUsersFixtures, WorkerFixtures>({
       await use(context);
       await context.close();
     },
-    { scope: 'worker' },
+    { scope: "worker" },
   ],
 
   workerPage: [
@@ -28,7 +28,7 @@ export const test = base.extend<AdminUsersFixtures, WorkerFixtures>({
       const page = await workerContext.newPage();
       await use(page);
     },
-    { scope: 'worker' },
+    { scope: "worker" },
   ],
 
   page: async ({ workerPage }, use) => {
@@ -39,8 +39,9 @@ export const test = base.extend<AdminUsersFixtures, WorkerFixtures>({
     const adminUsersPage = new AdminUsersPage(workerPage);
     await adminUsersPage.ensureListingReady();
     await use(adminUsersPage);
+    await adminUsersPage.inactivateCreatedUsers();
     await adminUsersPage.resetAfterTest();
   },
 });
 
-export { expect } from '@playwright/test';
+export { expect } from "@playwright/test";

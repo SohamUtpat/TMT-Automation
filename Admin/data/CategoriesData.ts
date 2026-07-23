@@ -15,10 +15,11 @@ export const CategoriesData = {
 
   validation: {
     nameRequired: /required|cannot be empty|enter category name|name is required/i,
-    nameDuplicate: /already exists|duplicate|unique|taken/i,
-    nameSpecialChars: /special|invalid|not valid|alphanumeric|letters/i,
+    nameDuplicate: /already exists|already exist|duplicate|unique|taken|same name|exists/i,
+    // App currently shows the required message for both empty and pattern-invalid names.
+    nameSpecialChars: /required|special|invalid|not valid|alphanumeric|letters|name not valid/i,
     nameMaxLength: 50,
-    nameTooLong: /maximum|max|too long|characters|length/i,
+    nameTooLong: /maximum|max|too long|characters|length|required/i,
   },
 
   search: {

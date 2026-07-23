@@ -1,8 +1,11 @@
-import { expect, type Locator, type Page } from '@playwright/test';
-import path from 'path';
-import { getBaseUrl } from '../config/appConfig';
-import { AdminUsersData } from '../data/AdminUsersData';
-import { ensureAuthenticated as restoreSession, isOnLoginPage } from '../utils/ensureAuthenticated';
+import { expect, type Locator, type Page } from "@playwright/test";
+import path from "path";
+import { getApiBaseUrl } from "../config/appConfig";
+import { AdminUsersData } from "../data/AdminUsersData";
+import {
+  ensureAuthenticated as restoreSession,
+  isOnLoginPage,
+} from "../utils/ensureAuthenticated";
 
 export type AdminUserFormInput = {
   firstName?: string;
@@ -48,6 +51,8 @@ export type AdminUsersApiResult = {
 
 export class AdminUsersPage {
   readonly page: Page;
+  private pendingUserName?: string;
+  private readonly createdUserNames = new Set<string>();
 
   constructor(page: Page) {
     this.page = page;
@@ -58,7 +63,7 @@ export class AdminUsersPage {
   async navigateToListing() {
     if (!this.isOnListingPage()) {
       await this.page.goto(AdminUsersData.paths.listing, {
-        waitUntil: 'commit',
+        waitUntil: "commit",
         timeout: 120_000,
       });
       await this.waitForListIfReady();
@@ -68,7 +73,7 @@ export class AdminUsersPage {
 
     if (!this.isOnListingPage()) {
       await this.page.goto(AdminUsersData.paths.listing, {
-        waitUntil: 'commit',
+        waitUntil: "commit",
         timeout: 120_000,
       });
       await this.waitForListIfReady();
@@ -89,12 +94,15 @@ export class AdminUsersPage {
   }
 
   isOnListingPage(): boolean {
-    const pathname = new URL(this.page.url()).pathname.replace(/\/$/, '');
+    const pathname = new URL(this.page.url()).pathname.replace(/\/$/, "");
     return pathname === AdminUsersData.paths.listing;
   }
 
   isOnCreatePage(): boolean {
-    return new URL(this.page.url()).pathname.replace(/\/$/, '') === AdminUsersData.paths.create;
+    return (
+      new URL(this.page.url()).pathname.replace(/\/$/, "") ===
+      AdminUsersData.paths.create
+    );
   }
 
   async ensureListingReady() {
@@ -104,8 +112,13 @@ export class AdminUsersPage {
     }
 
     const [title, createVisible] = await Promise.all([
-      this.page.locator('#pageTitle').textContent().catch(() => ''),
-      this.createUserLink().isVisible().catch(() => false),
+      this.page
+        .locator("#pageTitle")
+        .textContent()
+        .catch(() => ""),
+      this.createUserLink()
+        .isVisible()
+        .catch(() => false),
     ]);
 
     if (createVisible && title?.trim() === AdminUsersData.pageTitle) {
@@ -116,34 +129,48 @@ export class AdminUsersPage {
   }
 
   private async isOnFirstPage(): Promise<boolean> {
-    if (!(await this.pagination().isVisible().catch(() => false))) {
+    if (
+      !(await this.pagination()
+        .isVisible()
+        .catch(() => false))
+    ) {
       return true;
     }
-    return (await this.pagination().locator('.ant-pagination-prev').getAttribute('aria-disabled')) === 'true';
+    return (
+      (await this.pagination()
+        .locator(".ant-pagination-prev")
+        .getAttribute("aria-disabled")) === "true"
+    );
   }
 
   private async hasActiveSearch(): Promise<boolean> {
-    return (await this.searchInput().inputValue()).trim() !== '';
+    return (await this.searchInput().inputValue()).trim() !== "";
   }
 
   async goToFirstPage() {
-    const prev = this.pagination().locator('.ant-pagination-prev');
-    if ((await prev.getAttribute('aria-disabled')) === 'true') {
+    const prev = this.pagination().locator(".ant-pagination-prev");
+    if ((await prev.getAttribute("aria-disabled")) === "true") {
       return;
     }
     const response = this.waitForAdminListResponse();
     await prev.click();
     await response;
-    await expect(prev).toHaveAttribute('aria-disabled', 'true');
+    await expect(prev).toHaveAttribute("aria-disabled", "true");
   }
 
   async resetAfterTest() {
-    if (await this.confirmModal().isVisible().catch(() => false)) {
+    if (
+      await this.confirmModal()
+        .isVisible()
+        .catch(() => false)
+    ) {
       await this.confirmModalAction(false).catch(() => undefined);
     }
 
     if (this.isOnCreatePage()) {
-      await this.cancelButton().click().catch(() => undefined);
+      await this.cancelButton()
+        .click()
+        .catch(() => undefined);
       await this.expectListingLoaded().catch(() => undefined);
     } else if (!this.isOnListingPage()) {
       await this.navigateToListing().catch(() => undefined);
@@ -159,15 +186,50 @@ export class AdminUsersPage {
     }
   }
 
+  async inactivateCreatedUsers() {
+    for (const userName of this.createdUserNames) {
+      await this.ensureListingReady();
+      await this.searchUsers(userName);
+      const row = this.userRow(userName);
+
+      if (!(await row.isVisible().catch(() => false))) {
+        continue;
+      }
+
+      const status = (
+        await row.locator("td").nth(ADMIN_USER_TABLE_COL.status).textContent()
+      )?.trim();
+      if (status !== AdminUsersData.status.active) {
+        continue;
+      }
+
+      await this.clickDeleteIcon(userName);
+      await expect(this.confirmModal()).toContainText(
+        AdminUsersData.messages.inactivateConfirm,
+      );
+      await this.confirmModalAction(true);
+      await expect(
+        this.toast(AdminUsersData.messages.userInactivated),
+      ).toBeVisible({
+        timeout: 30_000,
+      });
+    }
+    this.createdUserNames.clear();
+  }
+
   async navigateToCreateUser() {
     const settingsRequest = this.page
-      .waitForResponse((resp) => resp.url().includes('/setting') || resp.url().includes('/settings'), {
-        timeout: 30_000,
-      })
+      .waitForResponse(
+        (resp) =>
+          resp.url().includes("/setting") || resp.url().includes("/settings"),
+        {
+          timeout: 30_000,
+        },
+      )
       .catch(() => undefined);
 
     await this.page.goto(AdminUsersData.paths.create, {
-      waitUntil: 'commit',
+      waitUntil: "commit",
       timeout: 120_000,
     });
     await settingsRequest;
@@ -175,27 +237,35 @@ export class AdminUsersPage {
   }
 
   async expectListingLoaded() {
-    const loading = this.page.getByText('Loading...', { exact: true });
+    const loading = this.page.getByText("Loading...", { exact: true });
     const loadingVisible = await loading.isVisible().catch(() => false);
 
     if (loadingVisible) {
-      await loading.waitFor({ state: 'hidden', timeout: 90_000 }).catch(async () => {
-        await this.page.reload({ waitUntil: 'commit', timeout: 120_000 });
-        await this.waitForAdminListResponse();
-      });
+      await loading
+        .waitFor({ state: "hidden", timeout: 90_000 })
+        .catch(async () => {
+          await this.page.reload({ waitUntil: "commit", timeout: 120_000 });
+          await this.waitForAdminListResponse();
+        });
     }
 
     if (await isOnLoginPage(this.page)) {
       await this.ensureAuthenticated();
       if (!this.isOnListingPage()) {
-        await this.page.goto(AdminUsersData.paths.listing, { waitUntil: 'commit', timeout: 120_000 });
+        await this.page.goto(AdminUsersData.paths.listing, {
+          waitUntil: "commit",
+          timeout: 120_000,
+        });
         await this.waitForListIfReady();
       }
     }
 
-    await expect(this.page.locator('#pageTitle')).toHaveText(AdminUsersData.pageTitle, {
-      timeout: 90_000,
-    });
+    await expect(this.page.locator("#pageTitle")).toHaveText(
+      AdminUsersData.pageTitle,
+      {
+        timeout: 90_000,
+      },
+    );
     await expect(this.createUserLink()).toBeVisible({ timeout: 30_000 });
     await expect(this.searchInput()).toBeVisible({ timeout: 30_000 });
   }
@@ -206,7 +276,9 @@ export class AdminUsersPage {
   }
 
   async expectEditFormLoaded() {
-    await expect(this.page.getByText(AdminUsersData.editPageTitle).first()).toBeVisible({
+    await expect(
+      this.page.getByText(AdminUsersData.editPageTitle).first(),
+    ).toBeVisible({
       timeout: 30_000,
     });
     await expect(this.userNameInput()).toBeDisabled();
@@ -214,117 +286,150 @@ export class AdminUsersPage {
 
   // ── Listing locators ────────────────────────────────────────────────────────
 
-  createUserLink = () => this.page.getByRole('link', { name: 'Create User' });
+  createUserLink = () => this.page.getByRole("link", { name: "Create User" });
 
-  searchInput = () => this.page.locator('.admin-search-box-container input, [placeholder="Search"]').first();
+  searchInput = () =>
+    this.page
+      .locator('.admin-search-box-container input, [placeholder="Search"]')
+      .first();
 
-  table = () => this.page.locator('.AdminUsersTable').first();
+  table = () => this.page.locator(".AdminUsersTable").first();
 
-  tableRows = () => this.page.locator('.AdminUsersTable .ant-table-tbody tr.ant-table-row');
+  tableRows = () =>
+    this.page.locator(".AdminUsersTable .ant-table-tbody tr.ant-table-row");
 
-  tableHeaders = () => this.page.locator('.AdminUsersTable .ant-table-thead th');
+  tableHeaders = () =>
+    this.page.locator(".AdminUsersTable .ant-table-thead th");
 
-  pagination = () => this.page.locator('.ant-pagination');
+  pagination = () => this.page.locator(".ant-pagination");
 
-  paginationInfo = () => this.page.locator('.ant-pagination-total-text');
+  paginationInfo = () => this.page.locator(".ant-pagination-total-text");
 
-  drawer = () => this.page.locator('.adminDrawer');
+  drawer = () => this.page.locator(".adminDrawer");
 
-  confirmModal = () => this.page.locator('.common-modal-box');
+  confirmModal = () => this.page.locator(".common-modal-box");
 
   userRow = (userName: string) =>
     this.tableRows().filter({
-      has: this.page.locator('td').nth(ADMIN_USER_TABLE_COL.userName).getByText(userName, {
-        exact: true,
-      }),
+      has: this.page
+        .locator("td")
+        .nth(ADMIN_USER_TABLE_COL.userName)
+        .getByText(userName, {
+          exact: true,
+        }),
     });
 
-  editIcon = (userName: string) => this.userRow(userName).locator('.edit-icon');
+  editIcon = (userName: string) => this.userRow(userName).locator(".edit-icon");
 
-  deleteIcon = (userName: string) => this.userRow(userName).locator('.delete-icon');
+  deleteIcon = (userName: string) =>
+    this.userRow(userName).locator(".delete-icon");
 
-  sortHeader = (column: string) => this.page.locator('th').filter({ hasText: new RegExp(column, 'i') });
+  sortHeader = (column: string) =>
+    this.page.getByRole("columnheader").filter({
+      has: this.page.getByText(column, { exact: true }),
+    });
 
-  nextPageButton = () => this.pagination().locator('.ant-pagination-next');
+  nextPageButton = () => this.pagination().locator(".ant-pagination-next");
 
   pageNumber = (num: number) =>
-    this.pagination().locator('.ant-pagination-item').filter({ hasText: String(num) });
+    this.pagination()
+      .locator(".ant-pagination-item")
+      .filter({ hasText: String(num) });
 
   // ── Create / edit form locators ─────────────────────────────────────────────
 
-  firstNameInput = () => this.page.locator('#firstName');
+  firstNameInput = () => this.page.locator("#firstName");
 
-  lastNameInput = () => this.page.locator('#lastName');
+  lastNameInput = () => this.page.locator("#lastName");
 
-  userNameInput = () => this.page.locator('#userName');
+  userNameInput = () => this.page.locator("#userName");
 
-  emailInput = () => this.page.locator('#email');
+  emailInput = () => this.page.locator("#email");
 
-  phoneInput = () => this.page.locator('#phone');
+  phoneInput = () => this.page.locator("#phone");
 
-  profileUploadInput = () => this.page.locator('.upload-image-css input[type="file"], .upload-image-css-admin input[type="file"]').first();
+  profileUploadInput = () =>
+    this.page
+      .locator(
+        '.upload-image-css input[type="file"], .upload-image-css-admin input[type="file"]',
+      )
+      .first();
 
-  profileImage = () => this.page.locator('.admin-body-image, .upload-image-css img').first();
+  profileImage = () =>
+    this.page.locator(".admin-body-image, .upload-image-css img").first();
 
-  submitButton = () => this.page.locator('.admin-submit-button');
+  submitButton = () => this.page.locator(".admin-submit-button");
 
-  cancelButton = () => this.page.locator('.admin-cancel-button');
+  cancelButton = () => this.page.locator(".admin-cancel-button");
 
-  statusRadioGroup = () => this.page.locator('#status');
+  statusRadioGroup = () => this.page.locator("#status");
 
   fieldError = (text: string | RegExp) =>
-    this.page.locator('[class*="textInput-module__info"], [class*="info"].error, .admin-text-labels .error').filter({
-      hasText: text,
-    });
+    this.page
+      .locator(
+        '[class*="textInput-module__info"], [class*="info"].error, .admin-text-labels .error',
+      )
+      .filter({
+        hasText: text,
+      });
 
   toast = (text: string | RegExp) =>
-    this.page.locator('.ant-message-notice-content').filter({ hasText: text });
+    this.page
+      .locator(".ant-message-notice-content")
+      .filter({ hasText: text })
+      .first();
 
   // ── API helpers ─────────────────────────────────────────────────────────────
 
   private get apiBaseUrl(): string {
-    const base = getBaseUrl();
-    return `${base}/api/user-management-service`;
+    return getApiBaseUrl();
   }
 
   private async getAuthHeaders(): Promise<Record<string, string>> {
-    const token = await this.page.evaluate(() => localStorage.getItem('gulf_net_admin-token'));
+    const token = await this.page.evaluate(() =>
+      localStorage.getItem("gulf_net_admin-token"),
+    );
     return {
-      Authorization: `Bearer ${token ?? ''}`,
-      'Content-Type': 'application/json',
-      language: 'english',
-      Accept: 'application/json, text/plain, */*',
+      Authorization: `Bearer ${token ?? ""}`,
+      "Content-Type": "application/json",
+      language: "english",
+      Accept: "application/json, text/plain, */*",
     };
   }
 
   private extractTotalRecords(body: unknown): number {
-    if (!body || typeof body !== 'object') {
+    if (!body || typeof body !== "object") {
       return 0;
     }
 
     const record = body as Record<string, unknown>;
     const metaData = record.metaData;
 
-    if (metaData && typeof metaData === 'object') {
-      const totalRecords = (metaData as { totalRecords?: unknown }).totalRecords;
-      if (typeof totalRecords === 'number') {
+    if (metaData && typeof metaData === "object") {
+      const totalRecords = (metaData as { totalRecords?: unknown })
+        .totalRecords;
+      if (typeof totalRecords === "number") {
         return totalRecords;
       }
     }
 
     const nestedData = record.data;
-    if (nestedData && typeof nestedData === 'object' && !Array.isArray(nestedData)) {
+    if (
+      nestedData &&
+      typeof nestedData === "object" &&
+      !Array.isArray(nestedData)
+    ) {
       const nestedTotal = this.extractTotalRecords(nestedData);
       if (nestedTotal > 0) {
         return nestedTotal;
       }
     }
 
-    if (typeof record.totalRecords === 'number') {
+    if (typeof record.totalRecords === "number") {
       return record.totalRecords;
     }
 
-    if (typeof record.total === 'number') {
+    if (typeof record.total === "number") {
       return record.total;
     }
 
@@ -332,7 +437,7 @@ export class AdminUsersPage {
   }
 
   private extractAdminUsers(body: unknown): ApiAdminUser[] {
-    if (!body || typeof body !== 'object') {
+    if (!body || typeof body !== "object") {
       return [];
     }
 
@@ -342,7 +447,7 @@ export class AdminUsersPage {
 
     if (Array.isArray(data)) {
       items = data;
-    } else if (data && typeof data === 'object') {
+    } else if (data && typeof data === "object") {
       const nested = data as Record<string, unknown>;
       if (Array.isArray(nested.data)) {
         items = nested.data;
@@ -357,13 +462,13 @@ export class AdminUsersPage {
 
     return items
       .map((item) => {
-        if (!item || typeof item !== 'object') {
+        if (!item || typeof item !== "object") {
           return null;
         }
 
         const user = item as Record<string, unknown>;
-        const userName = typeof user.userName === 'string' ? user.userName : '';
-        const id = typeof user.id === 'string' ? user.id : '';
+        const userName = typeof user.userName === "string" ? user.userName : "";
+        const id = typeof user.id === "string" ? user.id : "";
 
         if (!userName) {
           return null;
@@ -372,14 +477,19 @@ export class AdminUsersPage {
         return {
           id,
           userName,
-          firstName: typeof user.firstName === 'string' ? user.firstName : '',
-          lastName: typeof user.lastName === 'string' ? user.lastName : '',
-          email: typeof user.email === 'string' ? user.email : '',
-          status: typeof user.status === 'string' ? user.status : '',
+          firstName: typeof user.firstName === "string" ? user.firstName : "",
+          lastName: typeof user.lastName === "string" ? user.lastName : "",
+          email: typeof user.email === "string" ? user.email : "",
+          status: typeof user.status === "string" ? user.status : "",
           languagePreference:
-            typeof user.languagePreference === 'string' ? user.languagePreference : undefined,
-          phone: typeof user.phone === 'string' ? user.phone : undefined,
-          dorakuEnable: typeof user.dorakuEnable === 'boolean' ? user.dorakuEnable : undefined,
+            typeof user.languagePreference === "string"
+              ? user.languagePreference
+              : undefined,
+          phone: typeof user.phone === "string" ? user.phone : undefined,
+          dorakuEnable:
+            typeof user.dorakuEnable === "boolean"
+              ? user.dorakuEnable
+              : undefined,
         };
       })
       .filter((user): user is ApiAdminUser => user !== null);
@@ -391,17 +501,22 @@ export class AdminUsersPage {
   ): Promise<AdminUsersApiResult> {
     const page = options.page ?? 0;
     const size = options.size ?? AdminUsersData.pagination.defaultPageSize;
-    const search = options.search ?? '';
+    const search = options.search ?? "";
     const query = `page=${page}&size=${size}&search=${encodeURIComponent(search.trim())}`;
 
-    const response = await this.page.request.fetch(`${this.apiBaseUrl}/user/admin?${query}`, {
-      method: 'POST',
-      headers: await this.getAuthHeaders(),
-      data: {},
-    });
+    const response = await this.page.request.fetch(
+      `${this.apiBaseUrl}/user/admin?${query}`,
+      {
+        method: "POST",
+        headers: await this.getAuthHeaders(),
+        data: {},
+      },
+    );
 
     if (!response.ok()) {
-      throw new Error(`Admin users API POST /user/admin failed with status ${response.status()}`);
+      throw new Error(
+        `Admin users API POST /user/admin failed with status ${response.status()}`,
+      );
     }
 
     const body = await response.json();
@@ -427,7 +542,7 @@ export class AdminUsersPage {
     return user;
   }
 
-  async getApiUserByStatus(status: '1' | '2'): Promise<ApiAdminUser> {
+  async getApiUserByStatus(status: "1" | "2"): Promise<ApiAdminUser> {
     const { users } = await this.fetchAdminUsers({ size: 100 });
     const user = users.find((item) => item.status === status);
 
@@ -446,7 +561,7 @@ export class AdminUsersPage {
 
   async getLoggedInAdmin(): Promise<{ id: string; userName: string }> {
     const info = await this.page.evaluate(() => {
-      const raw = localStorage.getItem('gulf_net_admin-userInfo');
+      const raw = localStorage.getItem("gulf_net_admin-userInfo");
       if (!raw) {
         return null;
       }
@@ -458,7 +573,7 @@ export class AdminUsersPage {
     });
 
     if (!info?.id || !info?.userName) {
-      throw new Error('Logged-in admin user info not found in localStorage');
+      throw new Error("Logged-in admin user info not found in localStorage");
     }
 
     return { id: info.id, userName: info.userName };
@@ -466,9 +581,9 @@ export class AdminUsersPage {
 
   mapApiStatus(status: string): string {
     switch (status) {
-      case '1':
+      case "1":
         return AdminUsersData.status.active;
-      case '2':
+      case "2":
         return AdminUsersData.status.inactive;
       default:
         return status;
@@ -477,11 +592,11 @@ export class AdminUsersPage {
 
   mapApiLanguage(languagePreference?: string): string {
     switch (languagePreference) {
-      case 'eng':
+      case "eng":
         return AdminUsersData.languages.english;
-      case 'thai':
+      case "thai":
         return AdminUsersData.languages.thai;
-      case 'jpn':
+      case "jpn":
         return AdminUsersData.languages.japanese;
       default:
         return AdminUsersData.languages.english;
@@ -489,12 +604,12 @@ export class AdminUsersPage {
   }
 
   private waitForAdminListResponse() {
-    return this.page
-      .waitForResponse(
-        (resp) => resp.url().includes('/user/admin') && resp.request().method() === 'POST',
-        { timeout: 30_000 },
-      )
-      .catch(() => undefined);
+    return this.page.waitForResponse(
+      (resp) =>
+        resp.url().includes("/user/admin") &&
+        resp.request().method() === "POST",
+      { timeout: 30_000 },
+    );
   }
 
   private waitForUserCreateResponse() {
@@ -502,10 +617,10 @@ export class AdminUsersPage {
       (resp) => {
         const url = resp.url();
         return (
-          resp.request().method() === 'POST' &&
+          resp.request().method() === "POST" &&
           /\/user-management-service\/user(?:\?|$)/.test(url) &&
-          !url.includes('/user/mobile') &&
-          !url.includes('/user/admin')
+          !url.includes("/user/mobile") &&
+          !url.includes("/user/admin")
         );
       },
       { timeout: 60_000 },
@@ -514,7 +629,8 @@ export class AdminUsersPage {
 
   private waitForUserUpdateResponse() {
     return this.page.waitForResponse(
-      (resp) => /\/user\/[^/]+$/.test(resp.url()) && resp.request().method() === 'PUT',
+      (resp) =>
+        /\/user\/[^/]+$/.test(resp.url()) && resp.request().method() === "PUT",
       { timeout: 30_000 },
     );
   }
@@ -527,10 +643,17 @@ export class AdminUsersPage {
   }
 
   async searchUsers(query: string) {
+    if ((await this.searchInput().inputValue()).trim() === query.trim()) {
+      if (query.trim()) {
+        await expect(this.tableRows().first()).toBeVisible({ timeout: 30_000 });
+      }
+      return;
+    }
+
     const response = this.waitForAdminListResponse();
     await this.searchInput().fill(query);
     if (query) {
-      await this.searchInput().press('Enter');
+      await this.searchInput().press("Enter");
     }
     await response;
     if (query.trim()) {
@@ -539,7 +662,7 @@ export class AdminUsersPage {
   }
 
   async clearSearch() {
-    await this.searchUsers('');
+    await this.searchUsers("");
   }
 
   async getColumnValues(column: AdminUserTableColumn): Promise<string[]> {
@@ -549,8 +672,8 @@ export class AdminUsersPage {
     const values: string[] = [];
 
     for (let i = 0; i < count; i++) {
-      const text = await rows.nth(i).locator('td').nth(colIndex).textContent();
-      values.push(text?.trim() ?? '');
+      const text = await rows.nth(i).locator("td").nth(colIndex).textContent();
+      values.push(text?.trim() ?? "");
     }
     return values;
   }
@@ -558,7 +681,7 @@ export class AdminUsersPage {
   async getTotalUserCount(): Promise<number> {
     const text = await this.paginationInfo().textContent({ timeout: 15_000 });
     const match = text?.match(/of\s+([\d,]+)\s+items/i);
-    return match ? Number(match[1].replace(/,/g, '')) : 0;
+    return match ? Number(match[1].replace(/,/g, "")) : 0;
   }
 
   async getVisibleRowCount(): Promise<number> {
@@ -569,10 +692,26 @@ export class AdminUsersPage {
     await this.waitForAdminListResponse();
   }
 
-  async clickSort(column: string, order: 'asc' | 'desc' = 'asc') {
-    const iconTitle = order === 'asc' ? 'Sort Ascending' : 'Sort Descending';
+  async clickSort(column: string, order: "asc" | "desc" = "asc") {
+    const iconTitle = order === "asc" ? "Sort Ascending" : "Sort Descending";
+    const response = this.waitForAdminListResponse();
     await this.sortHeader(column).getByTitle(iconTitle).click();
-    await this.waitForAdminListResponse();
+    await response;
+  }
+
+  async clearSort(column: string, activeOrder: "asc" | "desc") {
+    await this.clickSort(column, activeOrder);
+    const iconTitle =
+      activeOrder === "asc" ? "Sort Ascending" : "Sort Descending";
+    await expect(this.sortHeader(column).getByTitle(iconTitle)).not.toHaveClass(
+      /sort-color-style/,
+    );
+  }
+
+  async goToNextPage() {
+    const response = this.waitForAdminListResponse();
+    await this.nextPageButton().click();
+    await response;
   }
 
   async openEditUser(userName: string) {
@@ -587,8 +726,11 @@ export class AdminUsersPage {
 
   async confirmModalAction(confirm = true) {
     const modal = this.confirmModal();
-    await modal.getByRole('button', { name: confirm ? 'Yes' : 'Cancel' }).click();
-    await this.waitForAdminListResponse();
+    const response = confirm ? this.waitForAdminListResponse() : undefined;
+    await modal
+      .getByRole("button", { name: confirm ? "Yes" : "Cancel" })
+      .click();
+    await response;
   }
 
   async expectUserVisible(userName: string) {
@@ -596,14 +738,19 @@ export class AdminUsersPage {
   }
 
   async expectFormFieldVisible(label: string | RegExp) {
-    await expect(this.page.locator('label, .admin-text-labels').filter({ hasText: label }).first()).toBeVisible();
+    await expect(this.page.getByText(label).first()).toBeVisible();
   }
 
   async dismissToasts() {
-    const closeButtons = this.page.locator('.ant-message-notice .anticon-close');
+    const closeButtons = this.page.locator(
+      ".ant-message-notice .anticon-close",
+    );
     const count = await closeButtons.count();
     for (let i = 0; i < count; i++) {
-      await closeButtons.nth(i).click().catch(() => undefined);
+      await closeButtons
+        .nth(i)
+        .click()
+        .catch(() => undefined);
     }
   }
 
@@ -612,24 +759,31 @@ export class AdminUsersPage {
   async fillTextField(input: Locator, value: string) {
     await input.click();
     await input.fill(value);
-    await input.press('Tab');
+    await input.press("Tab");
   }
 
-  async selectRadioByLabel(fieldLabel: string | RegExp, option: 'Yes' | 'No') {
-    const section = this.page.locator('.admin-radio-lables, .admin-radio-labels').filter({ hasText: fieldLabel });
-    await section.getByRole('radio', { name: option, exact: true }).check();
+  async selectRadioByLabel(fieldLabel: string | RegExp, option: "Yes" | "No") {
+    const section = this.page
+      .locator(".admin-radio-lables, .admin-radio-labels")
+      .filter({ hasText: fieldLabel });
+    await section.getByRole("radio", { name: option, exact: true }).check();
   }
 
   async selectLanguage(language: string) {
     await this.page
-      .locator('.languagePreference, .languageClass')
-      .getByRole('radio', { name: language, exact: true })
+      .locator(".language-class")
+      .getByRole("radio", { name: language, exact: true })
       .check();
   }
 
   async selectStatus(active: boolean) {
-    const label = active ? AdminUsersData.status.active : AdminUsersData.status.inactive;
-    await this.page.locator('#status').getByRole('radio', { name: label, exact: true }).check();
+    const label = active
+      ? AdminUsersData.status.active
+      : AdminUsersData.status.inactive;
+    await this.page
+      .locator("#status")
+      .getByRole("radio", { name: label, exact: true })
+      .check();
   }
 
   async fillCreateUserForm(data: AdminUserFormInput) {
@@ -641,6 +795,7 @@ export class AdminUsersPage {
     }
     if (data.userName !== undefined) {
       await this.fillTextField(this.userNameInput(), data.userName);
+      this.pendingUserName = data.userName.trim();
     }
     if (data.email !== undefined) {
       await this.fillTextField(this.emailInput(), data.email);
@@ -653,15 +808,20 @@ export class AdminUsersPage {
     }
     if (data.dorakuYes !== undefined) {
       const dorakuVisible = await this.page
-        .locator('.admin-radio-lables, .admin-radio-labels')
+        .locator(".admin-radio-lables, .admin-radio-labels")
         .filter({ hasText: /Doraku/i })
         .isVisible()
         .catch(() => false);
       if (dorakuVisible) {
-        await this.selectRadioByLabel(/Doraku/i, data.dorakuYes ? 'Yes' : 'No');
+        await this.selectRadioByLabel(/Doraku/i, data.dorakuYes ? "Yes" : "No");
       }
     }
-    if (data.statusActive !== undefined && (await this.statusRadioGroup().isVisible().catch(() => false))) {
+    if (
+      data.statusActive !== undefined &&
+      (await this.statusRadioGroup()
+        .isVisible()
+        .catch(() => false))
+    ) {
       await this.selectStatus(data.statusActive);
     }
   }
@@ -679,17 +839,26 @@ export class AdminUsersPage {
       return;
     }
     await this.expectUserSavedSuccess();
+    if (this.pendingUserName) {
+      this.createdUserNames.add(this.pendingUserName);
+      this.pendingUserName = undefined;
+    }
   }
 
   async submitUpdateUser(options?: { waitForApi?: boolean }) {
     if (options?.waitForApi !== false) {
       await this.dismissToasts();
     }
-    const updateRequest = options?.waitForApi === false ? undefined : this.waitForUserUpdateResponse();
+    const updateRequest =
+      options?.waitForApi === false
+        ? undefined
+        : this.waitForUserUpdateResponse();
     await this.submitButton().click();
     if (updateRequest) {
       await updateRequest.catch(async () => {
-        await expect(this.toast(AdminUsersData.messages.userSaved)).toBeVisible({ timeout: 60_000 });
+        await expect(this.toast(AdminUsersData.messages.userSaved)).toBeVisible(
+          { timeout: 60_000 },
+        );
       });
     }
   }
@@ -699,7 +868,9 @@ export class AdminUsersPage {
     await this.expectListingLoaded();
   }
 
-  async createAdminUser(data: AdminUserFormInput = AdminUsersData.buildValidUser()) {
+  async createAdminUser(
+    data: AdminUserFormInput = AdminUsersData.buildValidUser(),
+  ) {
     if (this.isOnListingPage()) {
       await this.clickCreateUser();
     } else {
@@ -713,12 +884,19 @@ export class AdminUsersPage {
   // ── Assertions ──────────────────────────────────────────────────────────────
 
   async expectUserSavedSuccess() {
-    await expect(this.toast(AdminUsersData.messages.userSaved)).toBeVisible({ timeout: 60_000 });
-    await expect(this.page).toHaveURL(new RegExp(AdminUsersData.paths.listing), { timeout: 60_000 });
+    await expect(this.toast(AdminUsersData.messages.userSaved)).toBeVisible({
+      timeout: 60_000,
+    });
+    await expect(this.page).toHaveURL(
+      new RegExp(AdminUsersData.paths.listing),
+      { timeout: 60_000 },
+    );
   }
 
   async expectValidationMessage(text: string | RegExp) {
-    await expect(this.fieldError(text).first().or(this.toast(text).first())).toBeVisible({
+    await expect(
+      this.fieldError(text).first().or(this.toast(text).first()),
+    ).toBeVisible({
       timeout: 15_000,
     });
   }
@@ -732,6 +910,9 @@ export class AdminUsersPage {
   }
 
   async expectColumnHeaderVisible(header: string) {
-    await expect(this.tableHeaders().filter({ hasText: header })).toBeVisible();
+    const columnHeader = this.page.getByRole("columnheader").filter({
+      has: this.page.getByText(header, { exact: true }),
+    });
+    await expect(columnHeader).toBeVisible();
   }
 }

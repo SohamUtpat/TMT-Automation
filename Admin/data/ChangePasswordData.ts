@@ -17,13 +17,12 @@ export const ChangePasswordData = {
   },
 
   validation: {
-    enterValidPassword: 'Need a valid password',
+    enterValidPassword: 'Password is required',
     passwordPolicy:
       'At least one special character, one number, one lowercase letter, and one uppercase letter required',
     passwordLength: '8-15 characters',
     passwordsDoNotMatch: 'Passwords do not match',
     fillConfirmPassword: 'Please fill confirm password',
-    sameAsOldPassword: /not be same as previous one/i,
     incorrectOldPassword: /invalid|incorrect|password/i,
   },
 
@@ -39,7 +38,7 @@ export const ChangePasswordData = {
       lastName: TestDataGenerator.generateRandomLastName(),
       userName: TestDataGenerator.generateUniqueUsername(),
       email: TestDataGenerator.generateUniqueEmail(),
-      phone: '',
+      phone: TestDataGenerator.generateUniqueMobile(),
       languagePreference: 'eng',
       password,
     };

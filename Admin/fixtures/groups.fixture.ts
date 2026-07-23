@@ -27,10 +27,12 @@ export const test = base.extend<GroupsFixtures, WorkerFixtures>({
     async ({ workerContext }, use) => {
       const page = await workerContext.newPage();
       const groupsPage = new GroupsPage(page);
+      // One-time navigation for the worker; per-test ensureGroupsReady is a cheap no-op when ready.
       await groupsPage.navigateToGroups();
       await use(page);
     },
-    { scope: 'worker', timeout: 240_000 },
+    // Slow local stack: allow dashboard → groups navigation without cutting off mid-wait.
+    { scope: 'worker', timeout: 180_000 },
   ],
 
   page: async ({ workerPage }, use) => {

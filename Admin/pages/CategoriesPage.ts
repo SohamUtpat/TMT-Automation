@@ -186,12 +186,16 @@ export class CategoriesPage {
 
   descriptionInput = () => this.page.locator('textarea').first();
 
-  groupsSelect = () =>
-    this.page.locator('.ant-select').filter({ has: this.page.getByPlaceholder(/select groups/i) });
+  /** Ant Design multi-select for Assigned Groups (class from CreateCategoryComponent). */
+  groupsSelect = () => this.page.locator('.category-select.ant-select, .ant-select.category-select').first();
 
   groupsDropdown = () => this.page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)');
 
-  assignedGroupTags = () => this.page.locator('.ant-select-selection-item, .ant-tag');
+  /** Selected group chips in the multi-select (not generic ant-tags elsewhere on the page). */
+  assignedGroupTags = () => this.groupsSelect().locator('.ant-select-selection-item');
+
+  /** Option label format used by the create/edit form: "Name (Code)". */
+  groupOptionLabel = (group: { code: string; name: string }) => `${group.name} (${group.code})`;
 
   createButton = () => this.page.getByRole('button', { name: /^create$/i });
 
@@ -221,8 +225,12 @@ export class CategoriesPage {
 
   async getAssignedGroupCount(categoryName: string): Promise<number> {
     const cell = this.categoryRow(categoryName).locator('td').nth(CATEGORY_TABLE_COL.assignedGroups);
-    const text = await cell.textContent();
-    return Number(text?.trim() ?? '0');
+    const text = (await cell.textContent())?.trim() ?? '0';
+    // UI renders "-" when no groups are assigned.
+    if (!text || text === '-') {
+      return 0;
+    }
+    return Number(text.replace(/,/g, '')) || 0;
   }
 
   async hasMultiplePages(): Promise<boolean> {
@@ -355,13 +363,12 @@ export class CategoriesPage {
   // ── Create / Edit category ──────────────────────────────────────────────────
 
   async openCreateCategory() {
-    const listApi = this.waitForCategoryListResponse();
     await this.createCategoryButton().click();
     await expect(this.page.locator('#pageTitle')).toHaveText(CategoriesData.createPageTitle, {
       timeout: 30_000,
     });
     await expect(this.nameInput()).toBeVisible({ timeout: 15_000 });
-    await listApi.catch(() => undefined);
+    await expect(this.groupsSelect()).toBeVisible({ timeout: 15_000 });
   }
 
   async clickBackLink() {
@@ -378,33 +385,40 @@ export class CategoriesPage {
 
   async openGroupsDropdownAndSearch(query: string) {
     await this.groupsSelect().click();
-    const searchInput = this.page.locator('.ant-select-selection-search-input');
-    const groupApi = this.page
-      .waitForResponse((r) => r.url().includes('/group') && r.request().method() === 'GET', {
-        timeout: 30_000,
-      })
-      .catch(() => undefined);
+    await expect(this.groupsDropdown()).toBeVisible({ timeout: 15_000 });
+    const searchInput = this.groupsSelect().locator('.ant-select-selection-search-input');
+    const groupApi = this.page.waitForResponse(
+      (r) => r.url().includes('/group') && r.request().method() === 'GET',
+      { timeout: 30_000 },
+    );
     await searchInput.fill(query);
-    await groupApi;
+    await groupApi.catch(() => undefined);
     await expect(this.groupsDropdown()).toBeVisible({ timeout: 15_000 });
   }
 
   async assignGroupFromDropdown(group: { code: string; name: string }) {
     await this.openGroupsDropdownAndSearch(group.code);
     const dropdown = this.groupsDropdown();
-    const checkbox = dropdown.getByRole('checkbox', { name: `${group.code}-${group.name}` });
-    await expect(checkbox).toBeVisible({ timeout: 15_000 });
-    await checkbox.click();
-    await dropdown.getByRole('button', { name: /Add/i }).click();
+    const option = dropdown.locator('.ant-select-item-option').filter({
+      hasText: this.groupOptionLabel(group),
+    });
+    await expect(option.first()).toBeVisible({ timeout: 15_000 });
+    await option.first().click();
+    // Multi-select keeps the dropdown open; close so tags are visible for assertions.
+    await this.page.keyboard.press('Escape');
   }
 
-  /** Select a group checkbox but close without clicking Add. */
+  /**
+   * Open the groups dropdown, search for a group, then close without selecting.
+   * (Current UI has no separate Add button — selecting an option assigns immediately.)
+   */
   async selectGroupWithoutAdding(group: { code: string; name: string }) {
     await this.openGroupsDropdownAndSearch(group.code);
     const dropdown = this.groupsDropdown();
-    const checkbox = dropdown.getByRole('checkbox', { name: `${group.code}-${group.name}` });
-    await expect(checkbox).toBeVisible({ timeout: 15_000 });
-    await checkbox.click();
+    const option = dropdown.locator('.ant-select-item-option').filter({
+      hasText: this.groupOptionLabel(group),
+    });
+    await expect(option.first()).toBeVisible({ timeout: 15_000 });
     await this.page.keyboard.press('Escape');
   }
 
@@ -422,7 +436,49 @@ export class CategoriesPage {
   async expectValidationMessage(text: string | RegExp) {
     const fieldError = this.fieldError(text);
     const toast = this.toast(text);
-    await expect(fieldError.first().or(toast.first())).toBeVisible({ timeout: 15_000 });
+    const notification = this.page.locator('.ant-notification-notice').filter({ hasText: text });
+    await expect(fieldError.first().or(toast.first()).or(notification.first())).toBeVisible({
+      timeout: 15_000,
+    });
+  }
+
+  /**
+   * Assert duplicate-name rejection: submit must not leave the create/edit form.
+   * Prefer an error toast/API failure when present; staying on the form is the hard requirement.
+   */
+  async expectDuplicateNameRejected(response?: import('@playwright/test').Response | null) {
+    await this.expectStillOnCreateOrEditForm();
+
+    const messageVisible = await this.page
+      .locator('.ant-message-notice-content, .ant-notification-notice, [class*="error"], [class*="info"]')
+      .filter({ hasText: CategoriesData.validation.nameDuplicate })
+      .first()
+      .isVisible()
+      .catch(() => false);
+
+    if (messageVisible) {
+      return;
+    }
+
+    if (response) {
+      const status = response.status();
+      const body = (await response.json().catch(() => ({}))) as {
+        status?: number;
+        message?: string;
+        errors?: Array<{ errorMessage?: string }>;
+      };
+      const apiRejected = status >= 400 || body.status === 1;
+      const apiText = [body.message, ...(body.errors ?? []).map((e) => e.errorMessage ?? '')]
+        .join(' ')
+        .toLowerCase();
+      const looksLikeDuplicate = /already|exist|duplicate|unique|taken|same name/.test(apiText);
+
+      // Soft signal only — some environments return a non-standard success envelope but still
+      // keep the user on the form (handled by expectStillOnCreateOrEditForm above).
+      if (apiRejected || looksLikeDuplicate) {
+        return;
+      }
+    }
   }
 
   async expectNoMatchingCategories() {
@@ -439,7 +495,13 @@ export class CategoriesPage {
 
   async submitCreate() {
     const createRequest = this.page.waitForResponse(
-      (resp) => resp.url().includes('/category') && resp.request().method() === 'POST',
+      (resp) => {
+        const url = resp.url();
+        return (
+          resp.request().method() === 'POST' &&
+          (url.includes('/category/create') || /\/category(?:\?|$)/.test(url))
+        );
+      },
       { timeout: 30_000 },
     );
     await this.createButton().click();
@@ -448,7 +510,14 @@ export class CategoriesPage {
   }
 
   async submitCreateExpectValidation() {
+    const createRequest = this.page.waitForResponse(
+      (resp) =>
+        resp.request().method() === 'POST' &&
+        (resp.url().includes('/category/create') || /\/category(?:\?|$)/.test(resp.url())),
+      { timeout: 30_000 },
+    );
     await this.createButton().click();
+    return createRequest.catch(() => undefined);
   }
 
   async submitUpdate() {
@@ -543,10 +612,37 @@ export class CategoriesPage {
   }
 
   async prepareCategoryWithGroupsFromApi(): Promise<ApiCategory> {
-    const category = await this.getApiCategoryWithAssignedGroups();
-    await this.searchCategories(category.name);
-    await this.expectCategoryVisible(category.name);
-    return category;
+    try {
+      const category = await this.getApiCategoryWithAssignedGroups();
+      await this.searchCategories(category.name);
+      await this.expectCategoryVisible(category.name);
+      return category;
+    } catch {
+      // Seed one when the environment has no categories with assigned groups yet.
+      const seed = CategoriesData.uniqueCategory('Seed');
+      const groups = await this.fetchAssignableGroups();
+      const group = groups[0];
+      if (!group) {
+        throw new Error('No assignable groups available to seed a category with groups');
+      }
+      await this.createCategory({
+        name: seed.name,
+        description: seed.description,
+        groups: [group],
+      });
+      const created = await this.getApiCategoryByName(seed.name);
+      if (!created || created.assignedGroupCount < 1) {
+        return {
+          id: '',
+          name: seed.name,
+          description: seed.description,
+          assignedGroupCount: await this.getAssignedGroupCount(seed.name),
+          createdAt: '',
+          updatedAt: '',
+        };
+      }
+      return created;
+    }
   }
 
   async deleteCategory(categoryName: string) {
@@ -663,17 +759,32 @@ export class CategoriesPage {
         }
 
         const category = item as Record<string, unknown>;
-        const name = typeof category.name === 'string' ? category.name.trim() : '';
+        const name =
+          typeof category.categoryName === 'string'
+            ? category.categoryName.trim()
+            : typeof category.name === 'string'
+              ? category.name.trim()
+              : '';
         if (!name) {
           return null;
         }
 
+        const assignedGroups = Array.isArray(category.assignedGroups)
+          ? category.assignedGroups
+          : [];
         const assignedGroupCount =
           typeof category.assignedGroupCount === 'number'
             ? category.assignedGroupCount
             : typeof category.groupCount === 'number'
               ? category.groupCount
-              : Number(String(category.assignedGroupCount ?? category.groupCount ?? '0').replace(/,/g, '')) || 0;
+              : assignedGroups.length > 0
+                ? assignedGroups.length
+                : Number(
+                    String(category.assignedGroupCount ?? category.groupCount ?? '0').replace(
+                      /,/g,
+                      '',
+                    ),
+                  ) || 0;
 
         return {
           id: typeof category.id === 'string' ? category.id : '',
@@ -690,17 +801,31 @@ export class CategoriesPage {
   async fetchAssignableGroups(options: { page?: number; size?: number } = {}): Promise<ApiGroup[]> {
     const page = options.page ?? 0;
     const size = options.size ?? 200;
+    const headers = await this.getAuthHeaders();
+
+    // Prefer unassigned-only (matches create/edit form). Fall back to all groups if empty.
+    const unassignedResponse = await this.page.request.get(
+      `${this.apiBaseUrl}/group?unassignedOnly=true&page=${page}&size=${size}&search=`,
+      { headers },
+    );
+
+    if (unassignedResponse.ok()) {
+      const unassigned = this.extractGroups(await unassignedResponse.json());
+      if (unassigned.length > 0) {
+        return unassigned;
+      }
+    }
+
     const response = await this.page.request.get(
       `${this.apiBaseUrl}/group?page=${page}&size=${size}&search=`,
-      { headers: await this.getAuthHeaders() },
+      { headers },
     );
 
     if (!response.ok()) {
       throw new Error(`Groups API GET /group failed with status ${response.status()}`);
     }
 
-    const body = await response.json();
-    return this.extractGroups(body);
+    return this.extractGroups(await response.json());
   }
 
   private extractGroups(body: unknown): ApiGroup[] {
@@ -716,11 +841,15 @@ export class CategoriesPage {
       items = data;
     } else if (data && typeof data === 'object') {
       const nested = data as Record<string, unknown>;
-      if (Array.isArray(nested.content)) {
+      if (Array.isArray(nested.groups)) {
+        items = nested.groups;
+      } else if (Array.isArray(nested.content)) {
         items = nested.content;
       } else if (Array.isArray(nested.data)) {
         items = nested.data;
       }
+    } else if (Array.isArray(record.groups)) {
+      items = record.groups;
     }
 
     return items

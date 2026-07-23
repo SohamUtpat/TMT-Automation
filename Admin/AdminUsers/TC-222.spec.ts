@@ -1,11 +1,13 @@
-import { test, expect } from '../fixtures/admin-users.fixture';
-import { AdminUsersData } from '../data/AdminUsersData';
-import { TestDataGenerator } from '../utils/TestDataGenerator';
-import { LoginPage } from '../pages/LoginPage';
-import { loginData } from '../data/loginData';
+import { test, expect } from "../fixtures/admin-users.fixture";
+import { AdminUsersData } from "../data/AdminUsersData";
+import { TestDataGenerator } from "../utils/TestDataGenerator";
+import { LoginPage } from "../pages/LoginPage";
+import { loginData } from "../data/loginData";
 
-test.describe('TC_AP_222 - Create Admin User Form Fields', () => {
-  test('Verify create admin user form has required fields', async ({ adminUsersPage }) => {
+test.describe("TC_AP_222 - Create Admin User Form Fields", () => {
+  test("Verify create admin user form has required fields", async ({
+    adminUsersPage,
+  }) => {
     await adminUsersPage.clickCreateUser();
 
     await expect(adminUsersPage.profileImage()).toBeVisible();
@@ -18,7 +20,7 @@ test.describe('TC_AP_222 - Create Admin User Form Fields', () => {
     await adminUsersPage.expectFormFieldVisible(/Language/i);
 
     const dorakuVisible = await adminUsersPage.page
-      .locator('.admin-radio-lables, .admin-radio-labels')
+      .locator(".admin-radio-lables, .admin-radio-labels")
       .filter({ hasText: /Doraku/i })
       .isVisible()
       .catch(() => false);

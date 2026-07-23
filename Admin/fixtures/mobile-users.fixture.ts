@@ -1,8 +1,8 @@
-import { test as base, type BrowserContext, type Page } from '@playwright/test';
-import path from 'path';
-import { MobileUsersPage } from '../pages/MobileUsersPage';
+import { test as base, type BrowserContext, type Page } from "@playwright/test";
+import path from "path";
+import { MobileUsersPage } from "../pages/MobileUsersPage";
 
-const authFile = path.join(__dirname, '../../playwright/.auth/admin.json');
+const authFile = path.join(__dirname, "../../playwright/.auth/admin.json");
 
 type MobileUsersFixtures = {
   mobileUsersPage: MobileUsersPage;
@@ -20,7 +20,7 @@ export const test = base.extend<MobileUsersFixtures, WorkerFixtures>({
       await use(context);
       await context.close();
     },
-    { scope: 'worker' },
+    { scope: "worker" },
   ],
 
   workerPage: [
@@ -28,7 +28,7 @@ export const test = base.extend<MobileUsersFixtures, WorkerFixtures>({
       const page = await workerContext.newPage();
       await use(page);
     },
-    { scope: 'worker' },
+    { scope: "worker" },
   ],
 
   page: async ({ workerPage }, use) => {
@@ -39,8 +39,9 @@ export const test = base.extend<MobileUsersFixtures, WorkerFixtures>({
     const mobileUsersPage = new MobileUsersPage(workerPage);
     await mobileUsersPage.ensureListingReady();
     await use(mobileUsersPage);
+    await mobileUsersPage.cleanupCreatedUsers();
     await mobileUsersPage.resetAfterTest();
   },
 });
 
-export { expect } from '@playwright/test';
+export { expect } from "@playwright/test";

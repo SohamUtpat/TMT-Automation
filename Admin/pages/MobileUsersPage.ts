@@ -1,9 +1,12 @@
-import { expect, type Locator, type Page } from '@playwright/test';
-import path from 'path';
-import { getBaseUrl } from '../config/appConfig';
-import { MobileUsersData } from '../data/MobileUsersData';
-import type { ApiGroup } from './GroupsPage';
-import { ensureAuthenticated as restoreSession, isOnLoginPage } from '../utils/ensureAuthenticated';
+import { expect, type Locator, type Page } from "@playwright/test";
+import path from "path";
+import { getApiBaseUrl } from "../config/appConfig";
+import { MobileUsersData } from "../data/MobileUsersData";
+import type { ApiGroup } from "./GroupsPage";
+import {
+  ensureAuthenticated as restoreSession,
+  isOnLoginPage,
+} from "../utils/ensureAuthenticated";
 
 export type MobileUserFormInput = {
   firstName?: string;
@@ -61,6 +64,7 @@ export type MobileUsersApiResult = {
 
 export class MobileUsersPage {
   readonly page: Page;
+  private readonly createdUserNames = new Set<string>();
 
   constructor(page: Page) {
     this.page = page;
@@ -71,7 +75,7 @@ export class MobileUsersPage {
   async navigateToListing() {
     if (!this.isOnListingPage()) {
       await this.page.goto(MobileUsersData.paths.listing, {
-        waitUntil: 'commit',
+        waitUntil: "commit",
         timeout: 120_000,
       });
       await this.waitForListIfReady();
@@ -81,7 +85,7 @@ export class MobileUsersPage {
 
     if (!this.isOnListingPage()) {
       await this.page.goto(MobileUsersData.paths.listing, {
-        waitUntil: 'commit',
+        waitUntil: "commit",
         timeout: 120_000,
       });
       await this.waitForListIfReady();
@@ -103,12 +107,15 @@ export class MobileUsersPage {
   }
 
   isOnListingPage(): boolean {
-    const pathname = new URL(this.page.url()).pathname.replace(/\/$/, '');
+    const pathname = new URL(this.page.url()).pathname.replace(/\/$/, "");
     return pathname === MobileUsersData.paths.listing;
   }
 
   isOnCreatePage(): boolean {
-    return new URL(this.page.url()).pathname.replace(/\/$/, '') === MobileUsersData.paths.create;
+    return (
+      new URL(this.page.url()).pathname.replace(/\/$/, "") ===
+      MobileUsersData.paths.create
+    );
   }
 
   /** Fast path when the shared worker page is already on a ready Mobile Users list. */
@@ -119,8 +126,13 @@ export class MobileUsersPage {
     }
 
     const [title, createVisible] = await Promise.all([
-      this.page.locator('#pageTitle').textContent().catch(() => ''),
-      this.createUserLink().isVisible().catch(() => false),
+      this.page
+        .locator("#pageTitle")
+        .textContent()
+        .catch(() => ""),
+      this.createUserLink()
+        .isVisible()
+        .catch(() => false),
     ]);
 
     if (createVisible && title?.trim() === MobileUsersData.pageTitle) {
@@ -131,43 +143,67 @@ export class MobileUsersPage {
   }
 
   private async isOnFirstPage(): Promise<boolean> {
-    if (!(await this.pagination().isVisible().catch(() => false))) {
+    if (
+      !(await this.pagination()
+        .isVisible()
+        .catch(() => false))
+    ) {
       return true;
     }
-    return (await this.pagination().locator('.ant-pagination-prev').getAttribute('aria-disabled')) === 'true';
+    return (
+      (await this.pagination()
+        .locator(".ant-pagination-prev")
+        .getAttribute("aria-disabled")) === "true"
+    );
   }
 
   private async hasActiveSearch(): Promise<boolean> {
-    return (await this.searchInput().inputValue()).trim() !== '';
+    return (await this.searchInput().inputValue()).trim() !== "";
   }
 
   private async isFilterApplied(): Promise<boolean> {
-    return this.page.locator('.filterCss .tickMarkCss, .filledTickCss').first().isVisible().catch(() => false);
+    return this.page
+      .locator(
+        '[class*="filterCss"] [class*="tickMarkCss"], [class*="filterCss"] [class*="filledTickCss"]',
+      )
+      .first()
+      .isVisible()
+      .catch(() => false);
   }
 
   async goToFirstPage() {
-    const prev = this.pagination().locator('.ant-pagination-prev');
-    if ((await prev.getAttribute('aria-disabled')) === 'true') {
+    const prev = this.pagination().locator(".ant-pagination-prev");
+    if ((await prev.getAttribute("aria-disabled")) === "true") {
       return;
     }
     const response = this.waitForUserListResponse();
     await prev.click();
     await response;
-    await expect(prev).toHaveAttribute('aria-disabled', 'true');
+    await expect(prev).toHaveAttribute("aria-disabled", "true");
   }
 
   /** Return to listing, clear search/filters/pagination only when needed. */
   async resetAfterTest() {
-    if (await this.confirmModal().isVisible().catch(() => false)) {
+    if (
+      await this.confirmModal()
+        .isVisible()
+        .catch(() => false)
+    ) {
       await this.confirmModalAction(false).catch(() => undefined);
     }
 
-    if (await this.filterModal().isVisible().catch(() => false)) {
-      await this.page.keyboard.press('Escape').catch(() => undefined);
+    if (
+      await this.filterModal()
+        .isVisible()
+        .catch(() => false)
+    ) {
+      await this.page.keyboard.press("Escape").catch(() => undefined);
     }
 
     if (this.isOnCreatePage()) {
-      await this.cancelButton().click().catch(() => undefined);
+      await this.cancelButton()
+        .click()
+        .catch(() => undefined);
       await this.expectListingLoaded().catch(() => undefined);
     } else if (!this.isOnListingPage()) {
       await this.navigateToListing().catch(() => undefined);
@@ -180,7 +216,11 @@ export class MobileUsersPage {
 
     if (await this.isFilterApplied()) {
       await this.openFilterModal().catch(() => undefined);
-      if (await this.filterModal().isVisible().catch(() => false)) {
+      if (
+        await this.filterModal()
+          .isVisible()
+          .catch(() => false)
+      ) {
         await this.clickFilterClearAll().catch(() => undefined);
         await this.applyFilter().catch(() => undefined);
       }
@@ -193,13 +233,17 @@ export class MobileUsersPage {
 
   async navigateToCreateUser() {
     const settingsRequest = this.page
-      .waitForResponse((resp) => resp.url().includes('/setting') || resp.url().includes('/settings'), {
-        timeout: 30_000,
-      })
+      .waitForResponse(
+        (resp) =>
+          resp.url().includes("/setting") || resp.url().includes("/settings"),
+        {
+          timeout: 30_000,
+        },
+      )
       .catch(() => undefined);
 
     await this.page.goto(MobileUsersData.paths.create, {
-      waitUntil: 'commit',
+      waitUntil: "commit",
       timeout: 120_000,
     });
     await settingsRequest;
@@ -208,7 +252,7 @@ export class MobileUsersPage {
 
   async navigateToBulkUpload() {
     await this.page.goto(MobileUsersData.paths.bulkUpload, {
-      waitUntil: 'commit',
+      waitUntil: "commit",
       timeout: 120_000,
     });
     await this.expectBulkUploadPageLoaded();
@@ -216,49 +260,66 @@ export class MobileUsersPage {
 
   async navigateToBulkUploadHistory() {
     await this.page.goto(MobileUsersData.paths.bulkUploadHistory, {
-      waitUntil: 'commit',
+      waitUntil: "commit",
       timeout: 120_000,
     });
     await this.expectBulkUploadHistoryLoaded();
   }
 
   async expectBulkUploadPageLoaded() {
-    await expect(this.page.getByText(MobileUsersData.bulkUpload.pageHeading).first()).toBeVisible({
+    await expect(
+      this.page.getByText(MobileUsersData.bulkUpload.pageHeading).first(),
+    ).toBeVisible({
       timeout: 60_000,
     });
     await expect(this.bulkUploadFileInput()).toBeAttached({ timeout: 30_000 });
-    await expect(this.bulkUploadSubmitButton()).toBeVisible({ timeout: 30_000 });
+    await expect(this.bulkUploadSubmitButton()).toBeVisible({
+      timeout: 30_000,
+    });
   }
 
   async expectBulkUploadHistoryLoaded() {
-    await expect(this.page.locator('#pageTitle')).toHaveText(MobileUsersData.bulkUpload.historyPageTitle, {
-      timeout: 60_000,
+    await expect(this.page.locator("#pageTitle")).toHaveText(
+      MobileUsersData.bulkUpload.historyPageTitle,
+      {
+        timeout: 60_000,
+      },
+    );
+    await expect(this.bulkUploadHistoryTable()).toBeVisible({
+      timeout: 30_000,
     });
-    await expect(this.bulkUploadHistoryTable()).toBeVisible({ timeout: 30_000 });
   }
 
   async expectListingLoaded() {
-    const loading = this.page.getByText('Loading...', { exact: true });
+    const loading = this.page.getByText("Loading...", { exact: true });
     const loadingVisible = await loading.isVisible().catch(() => false);
 
     if (loadingVisible) {
-      await loading.waitFor({ state: 'hidden', timeout: 90_000 }).catch(async () => {
-        await this.page.reload({ waitUntil: 'commit', timeout: 120_000 });
-        await this.waitForUserListResponse();
-      });
+      await loading
+        .waitFor({ state: "hidden", timeout: 90_000 })
+        .catch(async () => {
+          await this.page.reload({ waitUntil: "commit", timeout: 120_000 });
+          await this.waitForUserListResponse();
+        });
     }
 
     if (await isOnLoginPage(this.page)) {
       await this.ensureAuthenticated();
       if (!this.isOnListingPage()) {
-        await this.page.goto(MobileUsersData.paths.listing, { waitUntil: 'commit', timeout: 120_000 });
+        await this.page.goto(MobileUsersData.paths.listing, {
+          waitUntil: "commit",
+          timeout: 120_000,
+        });
         await this.waitForListIfReady();
       }
     }
 
-    await expect(this.page.locator('#pageTitle')).toHaveText(MobileUsersData.pageTitle, {
-      timeout: 90_000,
-    });
+    await expect(this.page.locator("#pageTitle")).toHaveText(
+      MobileUsersData.pageTitle,
+      {
+        timeout: 90_000,
+      },
+    );
     await expect(this.createUserLink()).toBeVisible({ timeout: 30_000 });
     await expect(this.searchInput()).toBeVisible({ timeout: 30_000 });
   }
@@ -269,7 +330,9 @@ export class MobileUsersPage {
   }
 
   async expectEditFormLoaded() {
-    await expect(this.page.getByText(MobileUsersData.editPageTitle).first()).toBeVisible({
+    await expect(
+      this.page.getByText(MobileUsersData.editPageTitle).first(),
+    ).toBeVisible({
       timeout: 30_000,
     });
     await expect(this.userNameInput()).toBeDisabled();
@@ -277,177 +340,216 @@ export class MobileUsersPage {
 
   // ── Listing locators ────────────────────────────────────────────────────────
 
-  createUserLink = () => this.page.getByRole('link', { name: 'Create User' });
+  createUserLink = () => this.page.getByRole("link", { name: "Create User" });
 
-  bulkUploadLink = () => this.page.getByRole('link', { name: 'Bulk Upload' });
+  bulkUploadLink = () => this.page.getByRole("link", { name: "Bulk Upload" });
 
   bulkUploadFileInput = () => this.page.locator('input[type="file"]');
 
-  bulkUploadSubmitButton = () => this.page.getByRole('button', { name: 'Upload', exact: true });
+  bulkUploadSubmitButton = () =>
+    this.page.getByRole("button", { name: "Upload", exact: true });
 
-  bulkTemplateDownloadButton = () => this.page.getByRole('button', { name: 'Download', exact: true });
+  bulkTemplateDownloadButton = () =>
+    this.page.getByRole("button", { name: "Download", exact: true });
 
-  bulkViewHistoryButton = () => this.page.getByRole('button', { name: 'View History' });
+  bulkViewHistoryButton = () =>
+    this.page.getByRole("button", { name: "View History", exact: true });
 
   bulkUploadRulesSection = () =>
-    this.page.getByText('Please follow below rules while uploading the document');
+    this.page.getByText(
+      "Please follow below rules while uploading the document",
+    );
 
-  bulkUploadHistoryTable = () => this.page.locator('.ant-table').first();
+  bulkUploadHistoryTable = () => this.page.locator(".ant-table").first();
 
-  bulkUploadHistoryHeaders = () => this.bulkUploadHistoryTable().locator('.ant-table-thead th');
+  bulkUploadHistoryHeaders = () =>
+    this.bulkUploadHistoryTable().locator(".ant-table-thead th");
 
-  bulkUploadHistoryRows = () => this.bulkUploadHistoryTable().locator('.ant-table-tbody tr.ant-table-row');
+  bulkUploadHistoryRows = () =>
+    this.bulkUploadHistoryTable().locator(".ant-table-tbody tr.ant-table-row");
 
   bulkUploadHistoryRow = (fileName: string) =>
     this.bulkUploadHistoryRows().filter({ hasText: fileName }).first();
 
-  searchInput = () => this.page.locator('.mobile-search-box-container input, [placeholder="Search"]').first();
+  searchInput = () =>
+    this.page
+      .locator('.mobile-search-box-container input, [placeholder="Search"]')
+      .first();
 
-  table = () => this.page.locator('.AdminUsersTable').first();
+  table = () => this.page.locator(".AdminUsersTable").first();
 
-  tableRows = () => this.page.locator('.AdminUsersTable .ant-table-tbody tr.ant-table-row');
+  tableRows = () =>
+    this.page.locator(".AdminUsersTable .ant-table-tbody tr.ant-table-row");
 
-  tableHeaders = () => this.page.locator('.AdminUsersTable .ant-table-thead th');
+  tableHeaders = () =>
+    this.page.locator(".AdminUsersTable .ant-table-thead th");
 
-  pagination = () => this.page.locator('.ant-pagination');
+  pagination = () => this.page.locator(".ant-pagination");
 
-  paginationInfo = () => this.page.locator('.ant-pagination-total-text');
+  paginationInfo = () => this.page.locator(".ant-pagination-total-text");
 
-  filterButton = () => this.page.locator('.filterCss');
+  filterButton = () => this.page.locator('[class*="filterCss"]').first();
 
-  filterModal = () => this.page.locator('.filterModal');
+  filterModal = () => this.page.locator(".filterModal");
 
-  drawer = () => this.page.locator('.adminDrawer');
+  drawer = () => this.page.locator(".adminDrawer");
 
-  confirmModal = () => this.page.locator('.common-modal-box');
+  confirmModal = () => this.page.locator(".common-modal-box");
 
   userRow = (userName: string) =>
     this.tableRows().filter({
-      has: this.page.locator('td').nth(MOBILE_USER_TABLE_COL.userName).getByText(userName, {
-        exact: true,
-      }),
+      has: this.page
+        .locator("td")
+        .nth(MOBILE_USER_TABLE_COL.userName)
+        .getByText(userName, {
+          exact: true,
+        }),
     });
 
-  editIcon = (userName: string) => this.userRow(userName).locator('.edit-icon');
+  editIcon = (userName: string) => this.userRow(userName).locator(".edit-icon");
 
-  deleteIcon = (userName: string) => this.userRow(userName).locator('.delete-icon');
+  deleteIcon = (userName: string) =>
+    this.userRow(userName).locator(".delete-icon");
 
-  sortHeader = (column: string) => this.page.locator('th').filter({ hasText: new RegExp(column, 'i') });
+  sortHeader = (column: string) => {
+    const escaped = column.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return this.table().getByRole("columnheader", {
+      name: new RegExp(`^${escaped}(?:\\s+caret-(?:up|down))*$`, "i"),
+    });
+  };
 
-  nextPageButton = () => this.pagination().locator('.ant-pagination-next');
+  nextPageButton = () => this.pagination().locator(".ant-pagination-next");
 
   pageNumber = (num: number) =>
-    this.pagination().locator('.ant-pagination-item').filter({ hasText: String(num) });
+    this.pagination()
+      .locator(".ant-pagination-item")
+      .filter({ hasText: String(num) });
 
   // ── Create / edit form locators ─────────────────────────────────────────────
 
-  firstNameInput = () => this.page.locator('#firstName');
+  firstNameInput = () => this.page.locator("#firstName");
 
-  lastNameInput = () => this.page.locator('#lastName');
+  lastNameInput = () => this.page.locator("#lastName");
 
-  userNameInput = () => this.page.locator('#userName');
+  userNameInput = () => this.page.locator("#userName");
 
-  emailInput = () => this.page.locator('#email');
+  emailInput = () => this.page.locator("#email");
 
-  passwordInput = () => this.page.locator('#password');
+  passwordInput = () => this.page.locator("#password");
 
-  phoneInput = () => this.page.locator('#phone');
+  phoneInput = () => this.page.locator("#phone");
 
-  dorakuInput = () => this.page.locator('#doraku_code');
+  dorakuInput = () => this.page.locator("#doraku_code");
 
-  profileUploadInput = () => this.page.locator('.upload-image-css-mobile input[type="file"]');
+  profileUploadInput = () =>
+    this.page.locator('.upload-image-css-mobile input[type="file"]');
 
-  profileImage = () => this.page.locator('.mobile-body-image');
+  profileImage = () => this.page.locator(".mobile-body-image");
 
-  submitButton = () => this.page.locator('.submit-button-mobile');
+  submitButton = () => this.page.locator(".submit-button-mobile");
 
-  cancelButton = () => this.page.locator('.cancel-button-mobile');
+  cancelButton = () => this.page.locator(".cancel-button-mobile");
 
-  resetPasswordButton = () => this.page.locator('.update-button-mobile');
+  resetPasswordButton = () => this.page.locator(".update-button-mobile");
 
-  passwordEyeIcon = () => this.page.locator('.password-css .anticon-eye, .password-css .anticon-eye-invisible');
+  passwordEyeIcon = () =>
+    this.page.locator(
+      ".password-css .anticon-eye, .password-css .anticon-eye-invisible",
+    );
 
-  groupSection = () => this.page.locator('.group-checkbox');
+  groupSection = () => this.page.locator(".group-checkbox");
 
-  hqGroupChip = () => this.groupSection().getByRole('button', { name: 'HQ' });
+  hqGroupChip = () => this.groupSection().getByRole("button", { name: "HQ" });
 
-  groupSelect = () => this.groupSection().locator('.ant-select');
+  groupSelect = () => this.groupSection().locator(".ant-select");
 
   fieldError = (text: string | RegExp) =>
-    this.page.locator('[class*="textInput-module__info"], [class*="info"].error, .mobile-text-labels .error').filter({
-      hasText: text,
-    });
+    this.page
+      .locator(
+        '[class*="textInput-module__info"], [class*="info"].error, .mobile-text-labels .error',
+      )
+      .filter({
+        hasText: text,
+      });
 
   toast = (text: string | RegExp) =>
-    this.page.locator('.ant-message-notice-content').filter({ hasText: text });
+    this.page.locator(".ant-message-notice-content").filter({ hasText: text });
 
   // ── API helpers ───────────────────────────────────────────────────────────
 
   private get apiBaseUrl(): string {
-    const base = getBaseUrl();
-    return `${base}/api/user-management-service`;
+    return getApiBaseUrl();
   }
 
   private async getAuthHeaders(): Promise<Record<string, string>> {
-    const token = await this.page.evaluate(() => localStorage.getItem('gulf_net_admin-token'));
+    const token = await this.page.evaluate(() =>
+      localStorage.getItem("gulf_net_admin-token"),
+    );
     return {
-      Authorization: `Bearer ${token ?? ''}`,
-      'Content-Type': 'application/json',
-      language: 'english',
-      Accept: 'application/json, text/plain, */*',
+      Authorization: `Bearer ${token ?? ""}`,
+      "Content-Type": "application/json",
+      language: "english",
+      Accept: "application/json, text/plain, */*",
     };
   }
 
   private async getMultipartAuthHeaders(): Promise<Record<string, string>> {
-    const token = await this.page.evaluate(() => localStorage.getItem('gulf_net_admin-token'));
+    const token = await this.page.evaluate(() =>
+      localStorage.getItem("gulf_net_admin-token"),
+    );
     return {
-      Authorization: `Bearer ${token ?? ''}`,
-      language: 'english',
-      Accept: 'application/json, text/plain, */*',
+      Authorization: `Bearer ${token ?? ""}`,
+      language: "english",
+      Accept: "application/json, text/plain, */*",
     };
   }
 
   private toApiLanguagePreference(language?: string): string {
     if (!language || /english/i.test(language)) {
-      return 'eng';
+      return "eng";
     }
     if (/thai|ไทย/i.test(language)) {
-      return 'tha';
+      return "tha";
     }
     if (/japanese|日本/i.test(language)) {
-      return 'jpn';
+      return "jpn";
     }
-    return 'eng';
+    return "eng";
   }
 
   private extractTotalRecords(body: unknown): number {
-    if (!body || typeof body !== 'object') {
+    if (!body || typeof body !== "object") {
       return 0;
     }
 
     const record = body as Record<string, unknown>;
     const metaData = record.metaData;
 
-    if (metaData && typeof metaData === 'object') {
-      const totalRecords = (metaData as { totalRecords?: unknown }).totalRecords;
-      if (typeof totalRecords === 'number') {
+    if (metaData && typeof metaData === "object") {
+      const totalRecords = (metaData as { totalRecords?: unknown })
+        .totalRecords;
+      if (typeof totalRecords === "number") {
         return totalRecords;
       }
     }
 
     const nestedData = record.data;
-    if (nestedData && typeof nestedData === 'object' && !Array.isArray(nestedData)) {
+    if (
+      nestedData &&
+      typeof nestedData === "object" &&
+      !Array.isArray(nestedData)
+    ) {
       const nestedTotal = this.extractTotalRecords(nestedData);
       if (nestedTotal > 0) {
         return nestedTotal;
       }
     }
 
-    if (typeof record.totalRecords === 'number') {
+    if (typeof record.totalRecords === "number") {
       return record.totalRecords;
     }
 
-    if (typeof record.total === 'number') {
+    if (typeof record.total === "number") {
       return record.total;
     }
 
@@ -455,7 +557,7 @@ export class MobileUsersPage {
   }
 
   private extractMobileUsers(body: unknown): ApiMobileUser[] {
-    if (!body || typeof body !== 'object') {
+    if (!body || typeof body !== "object") {
       return [];
     }
 
@@ -465,7 +567,7 @@ export class MobileUsersPage {
 
     if (Array.isArray(data)) {
       items = data;
-    } else if (data && typeof data === 'object') {
+    } else if (data && typeof data === "object") {
       const nested = data as Record<string, unknown>;
       if (Array.isArray(nested.data)) {
         items = nested.data;
@@ -480,13 +582,13 @@ export class MobileUsersPage {
 
     return items
       .map((item) => {
-        if (!item || typeof item !== 'object') {
+        if (!item || typeof item !== "object") {
           return null;
         }
 
         const user = item as Record<string, unknown>;
-        const userName = typeof user.userName === 'string' ? user.userName : '';
-        const id = typeof user.id === 'string' ? user.id : '';
+        const userName = typeof user.userName === "string" ? user.userName : "";
+        const id = typeof user.id === "string" ? user.id : "";
 
         if (!userName) {
           return null;
@@ -494,13 +596,13 @@ export class MobileUsersPage {
 
         const groups = (Array.isArray(user.userGroups) ? user.userGroups : [])
           .map((groupItem) => {
-            if (!groupItem || typeof groupItem !== 'object') {
+            if (!groupItem || typeof groupItem !== "object") {
               return null;
             }
             const group = groupItem as Record<string, unknown>;
-            const name = typeof group.name === 'string' ? group.name : '';
-            const code = typeof group.code === 'string' ? group.code : '';
-            const groupId = typeof group.id === 'string' ? group.id : '';
+            const name = typeof group.name === "string" ? group.name : "";
+            const code = typeof group.code === "string" ? group.code : "";
+            const groupId = typeof group.id === "string" ? group.id : "";
             if (!name && !code) {
               return null;
             }
@@ -510,31 +612,33 @@ export class MobileUsersPage {
 
         const roles = (Array.isArray(user.userRole) ? user.userRole : [])
           .map((roleItem) => {
-            if (!roleItem || typeof roleItem !== 'object') {
+            if (!roleItem || typeof roleItem !== "object") {
               return null;
             }
             const roleRecord = roleItem as Record<string, unknown>;
             const role = roleRecord.role;
-            if (!role || typeof role !== 'object') {
+            if (!role || typeof role !== "object") {
               return null;
             }
             const roleObj = role as Record<string, unknown>;
-            const code = typeof roleObj.code === 'string' ? roleObj.code : '';
-            const name = typeof roleObj.name === 'string' ? roleObj.name : '';
+            const code = typeof roleObj.code === "string" ? roleObj.code : "";
+            const name = typeof roleObj.name === "string" ? roleObj.name : "";
             if (!code && !name) {
               return null;
             }
             return { code, name };
           })
-          .filter((role): role is { code: string; name: string } => role !== null);
+          .filter(
+            (role): role is { code: string; name: string } => role !== null,
+          );
 
         return {
           id,
           userName,
-          firstName: typeof user.firstName === 'string' ? user.firstName : '',
-          lastName: typeof user.lastName === 'string' ? user.lastName : '',
-          email: typeof user.email === 'string' ? user.email : '',
-          status: typeof user.status === 'string' ? user.status : '',
+          firstName: typeof user.firstName === "string" ? user.firstName : "",
+          lastName: typeof user.lastName === "string" ? user.lastName : "",
+          email: typeof user.email === "string" ? user.email : "",
+          status: typeof user.status === "string" ? user.status : "",
           groups,
           roles,
         };
@@ -543,7 +647,7 @@ export class MobileUsersPage {
   }
 
   private extractGroups(body: unknown): ApiGroup[] {
-    if (!body || typeof body !== 'object') {
+    if (!body || typeof body !== "object") {
       return [];
     }
 
@@ -553,7 +657,7 @@ export class MobileUsersPage {
 
     if (Array.isArray(data)) {
       items = data;
-    } else if (data && typeof data === 'object') {
+    } else if (data && typeof data === "object") {
       const nested = data as Record<string, unknown>;
       if (Array.isArray(nested.groups)) {
         items = nested.groups;
@@ -568,18 +672,18 @@ export class MobileUsersPage {
 
     return items
       .map((item) => {
-        if (!item || typeof item !== 'object') {
+        if (!item || typeof item !== "object") {
           return null;
         }
 
         const group = item as Record<string, unknown>;
-        const name = typeof group.name === 'string' ? group.name : '';
-        const code = typeof group.code === 'string' ? group.code : '';
-        const id = typeof group.id === 'string' ? group.id : '';
+        const name = typeof group.name === "string" ? group.name : "";
+        const code = typeof group.code === "string" ? group.code : "";
+        const id = typeof group.id === "string" ? group.id : "";
         const userCount =
-          typeof group.userCount === 'number'
+          typeof group.userCount === "number"
             ? group.userCount
-            : Number(String(group.userCount ?? '0').replace(/,/g, '')) || 0;
+            : Number(String(group.userCount ?? "0").replace(/,/g, "")) || 0;
 
         if (!name) {
           return null;
@@ -595,22 +699,31 @@ export class MobileUsersPage {
       page?: number;
       size?: number;
       search?: string;
-      filters?: { userGroups?: string[]; userRoles?: string[]; status?: string | null };
+      filters?: {
+        userGroups?: string[];
+        userRoles?: string[];
+        status?: string | null;
+      };
     } = {},
   ): Promise<MobileUsersApiResult> {
     const page = options.page ?? 0;
     const size = options.size ?? MobileUsersData.pagination.defaultPageSize;
-    const search = options.search ?? '';
+    const search = options.search ?? "";
     const query = `page=${page}&size=${size}&search=${encodeURIComponent(search.trim())}`;
 
-    const response = await this.page.request.fetch(`${this.apiBaseUrl}/user/mobile?${query}`, {
-      method: 'POST',
-      headers: await this.getAuthHeaders(),
-      data: { ...(options.filters ?? {}) },
-    });
+    const response = await this.page.request.fetch(
+      `${this.apiBaseUrl}/user/mobile?${query}`,
+      {
+        method: "POST",
+        headers: await this.getAuthHeaders(),
+        data: { ...(options.filters ?? {}) },
+      },
+    );
 
     if (!response.ok()) {
-      throw new Error(`Mobile users API POST /user/mobile failed with status ${response.status()}`);
+      throw new Error(
+        `Mobile users API POST /user/mobile failed with status ${response.status()}`,
+      );
     }
 
     const body = await response.json();
@@ -642,21 +755,25 @@ export class MobileUsersPage {
     return user;
   }
 
-  async fetchGroups(options: { page?: number; size?: number } = {}): Promise<ApiGroup[]> {
+  async fetchGroups(
+    options: { page?: number; size?: number } = {},
+  ): Promise<ApiGroup[]> {
     const page = options.page ?? 0;
     const size = options.size ?? 50;
 
     const response = await this.page.request.fetch(
       `${this.apiBaseUrl}/group?page=${page}&size=${size}&search=`,
       {
-        method: 'GET',
+        method: "GET",
         headers: await this.getAuthHeaders(),
         timeout: 60_000,
       },
     );
 
     if (!response.ok()) {
-      throw new Error(`Groups API GET /group failed with status ${response.status()}`);
+      throw new Error(
+        `Groups API GET /group failed with status ${response.status()}`,
+      );
     }
 
     const body = await response.json();
@@ -665,10 +782,12 @@ export class MobileUsersPage {
 
   async getApiHqGroup(): Promise<ApiGroup> {
     const groups = await this.fetchGroups();
-    const hqGroup = groups.find((group) => group.code === 'HQ' || group.name === 'HQ Group');
+    const hqGroup = groups.find(
+      (group) => group.code === "HQ" || group.name === "HQ Group",
+    );
 
     if (!hqGroup) {
-      throw new Error('HQ Group not found from API');
+      throw new Error("HQ Group not found from API");
     }
 
     return hqGroup;
@@ -681,11 +800,15 @@ export class MobileUsersPage {
     const minCount = options.minUserCount ?? 1;
     const withMembers = groups.filter(
       (group) =>
-        group.userCount >= minCount && group.code !== 'HQ' && group.name !== 'HQ Group',
+        group.userCount >= minCount &&
+        group.code !== "HQ" &&
+        group.name !== "HQ Group",
     );
 
     if (!withMembers.length) {
-      throw new Error(`No non-HQ groups with at least ${minCount} member(s) found from API`);
+      throw new Error(
+        `No non-HQ groups with at least ${minCount} member(s) found from API`,
+      );
     }
 
     return withMembers.sort((a, b) => b.userCount - a.userCount)[0];
@@ -694,8 +817,12 @@ export class MobileUsersPage {
   private waitForUserListResponse() {
     return this.page
       .waitForResponse(
-        (resp) => resp.url().includes('/user/mobile') && resp.request().method() === 'POST',
-        { timeout: 30_000 },
+        (resp) =>
+          resp.url().includes("/user/mobile") &&
+          resp.request().method() === "POST",
+        {
+          timeout: 30_000,
+        },
       )
       .catch(() => undefined);
   }
@@ -705,10 +832,10 @@ export class MobileUsersPage {
       (resp) => {
         const url = resp.url();
         return (
-          resp.request().method() === 'POST' &&
+          resp.request().method() === "POST" &&
           /\/user-management-service\/user(?:\?|$)/.test(url) &&
-          !url.includes('/user/mobile') &&
-          !url.includes('/user/admin')
+          !url.includes("/user/mobile") &&
+          !url.includes("/user/admin")
         );
       },
       { timeout: 60_000 },
@@ -717,8 +844,11 @@ export class MobileUsersPage {
 
   private waitForUserUpdateResponse() {
     return this.page.waitForResponse(
-      (resp) => /\/user\/[^/]+$/.test(resp.url()) && resp.request().method() === 'PUT',
-      { timeout: 30_000 },
+      (resp) =>
+        /\/user\/[^/]+$/.test(resp.url()) && resp.request().method() === "PUT",
+      {
+        timeout: 30_000,
+      },
     );
   }
 
@@ -733,7 +863,7 @@ export class MobileUsersPage {
     const response = this.waitForUserListResponse();
     await this.searchInput().fill(query);
     if (query) {
-      await this.searchInput().press('Enter');
+      await this.searchInput().press("Enter");
     }
     await response;
     if (query.trim()) {
@@ -742,7 +872,7 @@ export class MobileUsersPage {
   }
 
   async clearSearch() {
-    await this.searchUsers('');
+    await this.searchUsers("");
   }
 
   async getColumnValues(column: MobileUserTableColumn): Promise<string[]> {
@@ -752,8 +882,8 @@ export class MobileUsersPage {
     const values: string[] = [];
 
     for (let i = 0; i < count; i++) {
-      const text = await rows.nth(i).locator('td').nth(colIndex).textContent();
-      values.push(text?.trim() ?? '');
+      const text = await rows.nth(i).locator("td").nth(colIndex).textContent();
+      values.push(text?.trim() ?? "");
     }
     return values;
   }
@@ -761,7 +891,7 @@ export class MobileUsersPage {
   async getTotalUserCount(): Promise<number> {
     const text = await this.paginationInfo().textContent({ timeout: 15_000 });
     const match = text?.match(/of\s+([\d,]+)\s+items/i);
-    return match ? Number(match[1].replace(/,/g, '')) : 0;
+    return match ? Number(match[1].replace(/,/g, "")) : 0;
   }
 
   async getVisibleRowCount(): Promise<number> {
@@ -772,10 +902,11 @@ export class MobileUsersPage {
     await this.waitForUserListResponse();
   }
 
-  async clickSort(column: string, order: 'asc' | 'desc' = 'asc') {
-    const iconTitle = order === 'asc' ? 'Sort Ascending' : 'Sort Descending';
+  async clickSort(column: string, order: "asc" | "desc" = "asc") {
+    const iconTitle = order === "asc" ? "Sort Ascending" : "Sort Descending";
+    const response = this.waitForUserListResponse();
     await this.sortHeader(column).getByTitle(iconTitle).click();
-    await this.waitForUserListResponse();
+    await response;
   }
 
   async openEditUser(userName: string) {
@@ -790,8 +921,11 @@ export class MobileUsersPage {
 
   async confirmModalAction(confirm = true) {
     const modal = this.confirmModal();
-    await modal.getByRole('button', { name: confirm ? 'Yes' : 'Cancel' }).click();
-    await this.waitForUserListResponse();
+    const response = confirm ? this.waitForUserListResponse() : undefined;
+    await modal
+      .getByRole("button", { name: confirm ? "Yes" : "Cancel" })
+      .click();
+    await response;
   }
 
   // ── Filter ──────────────────────────────────────────────────────────────────
@@ -801,39 +935,54 @@ export class MobileUsersPage {
     await expect(this.filterModal()).toBeVisible({ timeout: 10_000 });
   }
 
-  async selectFilterTab(tabName: 'Groups' | 'Roles' | 'Status') {
+  async selectFilterTab(tabName: "Groups" | "Roles" | "Status") {
     await this.filterModal().getByText(tabName, { exact: true }).click();
   }
 
   async clickFilterSelectAll() {
-    await this.filterModal().getByText('Select All', { exact: true }).click();
+    await this.filterModal()
+      .locator(".ant-tabs-tabpane-active")
+      .getByText("Select All", { exact: true })
+      .click();
   }
 
   async clickFilterClearAll() {
-    await this.filterModal().getByText('Clear All', { exact: true }).click();
+    await this.filterModal().getByText("Clear All", { exact: true }).click();
   }
 
   async applyFilter() {
     const response = this.waitForUserListResponse();
-    await this.filterModal().getByRole('button', { name: /Apply Filter/i }).click();
+    await this.filterModal()
+      .getByRole("button", { name: /Apply Filter/i })
+      .click();
     await response;
     await expect(this.filterModal()).toBeHidden({ timeout: 15_000 });
   }
 
   async toggleFilterCheckbox(label: string) {
-    await this.filterModal().locator('label').filter({ hasText: label }).click();
+    await this.filterModal()
+      .locator("label")
+      .filter({
+        hasText: new RegExp(
+          `^${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+          "i",
+        ),
+      })
+      .click();
   }
 
   // ── Create / edit form actions ──────────────────────────────────────────────
 
   /** Clicks away from the active input so on-blur validation runs (form card / page title). */
   async triggerFieldValidation() {
-    const formCard = this.page.locator('.create-mobile-form-div, .mobile-body-css').first();
+    const formCard = this.page
+      .locator(".create-mobile-form-div, .mobile-body-css")
+      .first();
     if (await formCard.isVisible().catch(() => false)) {
       await formCard.click({ position: { x: 8, y: 8 } });
       return;
     }
-    await this.page.locator('#pageTitle').click();
+    await this.page.locator("#pageTitle").click();
   }
 
   async fillTextField(input: Locator, value: string) {
@@ -842,39 +991,58 @@ export class MobileUsersPage {
     await this.triggerFieldValidation();
   }
 
-  async selectRadioByLabel(fieldLabel: string | RegExp, option: 'Yes' | 'No') {
-    const section = this.page.locator('.mobile-radio-lables').filter({ hasText: fieldLabel });
-    await section.getByRole('radio', { name: option, exact: true }).check();
+  async selectRadioByLabel(fieldLabel: string | RegExp, option: "Yes" | "No") {
+    const section = this.page
+      .locator(".mobile-radio-lables")
+      .filter({ hasText: fieldLabel });
+    await section.getByRole("radio", { name: option, exact: true }).check();
   }
 
   async selectLanguage(language: string) {
     await this.page
-      .locator('.languagePreference, .languageClass')
-      .getByRole('radio', { name: language })
+      .locator(".languagePreference, .languageClass")
+      .getByRole("radio", { name: language })
       .check();
   }
 
   async selectStatus(active: boolean) {
-    const label = active ? MobileUsersData.status.active : MobileUsersData.status.inactive;
-    await this.page.locator('#status').locator('..').getByRole('radio', { name: label }).check();
+    const label = active
+      ? MobileUsersData.status.active
+      : MobileUsersData.status.inactive;
+    await this.page
+      .locator("#status")
+      .locator("..")
+      .getByRole("radio", { name: label })
+      .check();
   }
 
   async fillCreateUserForm(data: MobileUserFormInput) {
-    if (data.firstName !== undefined) await this.fillTextField(this.firstNameInput(), data.firstName);
-    if (data.lastName !== undefined) await this.fillTextField(this.lastNameInput(), data.lastName);
-    if (data.userName !== undefined) await this.fillTextField(this.userNameInput(), data.userName);
-    if (data.email !== undefined) await this.fillTextField(this.emailInput(), data.email);
-    if (data.password !== undefined) await this.fillTextField(this.passwordInput(), data.password);
-    if (data.phone !== undefined) await this.fillTextField(this.phoneInput(), data.phone);
-    if (data.dorakuCode !== undefined) await this.fillTextField(this.dorakuInput(), data.dorakuCode);
+    if (data.firstName !== undefined)
+      await this.fillTextField(this.firstNameInput(), data.firstName);
+    if (data.lastName !== undefined)
+      await this.fillTextField(this.lastNameInput(), data.lastName);
+    if (data.userName !== undefined)
+      await this.fillTextField(this.userNameInput(), data.userName);
+    if (data.email !== undefined)
+      await this.fillTextField(this.emailInput(), data.email);
+    if (data.password !== undefined)
+      await this.fillTextField(this.passwordInput(), data.password);
+    if (data.phone !== undefined)
+      await this.fillTextField(this.phoneInput(), data.phone);
+    if (data.dorakuCode !== undefined)
+      await this.fillTextField(this.dorakuInput(), data.dorakuCode);
     if (data.language) await this.selectLanguage(data.language);
     if (data.deleteMsgYes !== undefined) {
-      await this.selectRadioByLabel(/Delete Message/i, data.deleteMsgYes ? 'Yes' : 'No');
+      await this.selectRadioByLabel(
+        /Delete Message/i,
+        data.deleteMsgYes ? "Yes" : "No",
+      );
     }
     if (data.roleHqYes !== undefined) {
-      await this.selectRadioByLabel(/Role HQ/i, data.roleHqYes ? 'Yes' : 'No');
+      await this.selectRadioByLabel(/Role HQ/i, data.roleHqYes ? "Yes" : "No");
     }
-    if (data.statusActive !== undefined) await this.selectStatus(data.statusActive);
+    if (data.statusActive !== undefined)
+      await this.selectStatus(data.statusActive);
   }
 
   async uploadProfilePhoto(filePath: string) {
@@ -887,7 +1055,9 @@ export class MobileUsersPage {
 
   private async dismissToasts() {
     await this.page.evaluate(() => {
-      document.querySelectorAll('.ant-message-notice').forEach((node) => node.remove());
+      document
+        .querySelectorAll(".ant-message-notice")
+        .forEach((node) => node.remove());
     });
   }
 
@@ -895,11 +1065,30 @@ export class MobileUsersPage {
     if (options?.waitForApi !== false) {
       await this.dismissToasts();
     }
+    const submittedUserName =
+      options?.waitForApi === false
+        ? ""
+        : (await this.userNameInput().inputValue()).trim();
+    const createResponse =
+      options?.waitForApi === false
+        ? undefined
+        : this.waitForUserCreateResponse();
     await this.submitButton().click();
     if (options?.waitForApi === false) {
       return;
     }
+    const response = await createResponse;
+    if (!response?.ok()) {
+      const responseBody = await response?.text().catch(() => "");
+      throw new Error(
+        `Create mobile user failed with status ${response?.status() ?? "unknown"}: ${responseBody}`,
+      );
+    }
+    if (submittedUserName) {
+      this.createdUserNames.add(submittedUserName);
+    }
     await this.expectUserSavedSuccess();
+    return response;
   }
 
   async submitUpdateUser() {
@@ -918,14 +1107,16 @@ export class MobileUsersPage {
     data: MobileUserFormInput = MobileUsersData.buildValidUser(),
     options: { userGroup?: string } = {},
   ) {
-    const userName = data.userName ?? '';
-    const firstName = data.firstName ?? '';
-    const lastName = data.lastName ?? '';
-    const email = data.email ?? '';
-    const password = data.password ?? '';
+    const userName = data.userName ?? "";
+    const firstName = data.firstName ?? "";
+    const lastName = data.lastName ?? "";
+    const email = data.email ?? "";
+    const password = data.password ?? "";
 
     if (!userName || !firstName || !lastName || !email || !password) {
-      throw new Error('createMobileUserViaApi requires userName, firstName, lastName, email, and password');
+      throw new Error(
+        "createMobileUserViaApi requires userName, firstName, lastName, email, and password",
+      );
     }
 
     const response = await this.page.request.post(`${this.apiBaseUrl}/user`, {
@@ -935,26 +1126,32 @@ export class MobileUsersPage {
         firstName,
         lastName,
         email,
-        phone: data.phone ?? '',
+        phone: data.phone ?? "",
         languagePreference: this.toApiLanguagePreference(data.language),
-        userRole: 'MOBILE',
+        userRole: "MOBILE",
         userGroup: options.userGroup ?? MobileUsersData.hqGroupCode,
-        appType: 'MOBILE',
+        appType: "MOBILE",
         password,
-        dorakuUserCode: data.dorakuCode ?? '',
-        status: data.statusActive === false ? '0' : '1',
-        rewardBudget: '0',
+        dorakuUserCode: data.dorakuCode ?? "",
+        status: data.statusActive === false ? "0" : "1",
+        rewardBudget: "0",
       },
     });
 
     if (!response.ok()) {
-      throw new Error(`Create mobile user API POST /user failed with status ${response.status()}`);
+      const responseBody = await response.text().catch(() => "");
+      throw new Error(
+        `Create mobile user API POST /user failed with status ${response.status()}: ${responseBody}`,
+      );
     }
 
+    this.createdUserNames.add(userName);
     return data;
   }
 
-  async createMobileUser(data: MobileUserFormInput = MobileUsersData.buildValidUser()) {
+  async createMobileUser(
+    data: MobileUserFormInput = MobileUsersData.buildValidUser(),
+  ) {
     if (this.isOnListingPage()) {
       await this.clickCreateUser();
     } else {
@@ -963,35 +1160,84 @@ export class MobileUsersPage {
     await this.fillCreateUserForm(data);
     await this.triggerFieldValidation();
     await this.submitCreateUser();
+    if (data.userName) {
+      this.createdUserNames.add(data.userName.trim());
+    }
     return data;
+  }
+
+  /**
+   * Inactivate only users whose successful create was registered by this fixture.
+   * Shared/pre-existing records are never considered for cleanup.
+   */
+  async cleanupCreatedUsers() {
+    const userNames = [...this.createdUserNames];
+    this.createdUserNames.clear();
+
+    for (const userName of userNames) {
+      try {
+        await this.navigateToListing();
+        await this.searchUsers(userName);
+        const row = this.userRow(userName);
+        if (!(await row.isVisible().catch(() => false))) {
+          continue;
+        }
+
+        const status = (
+          await row.locator("td").nth(MOBILE_USER_TABLE_COL.status).innerText()
+        ).trim();
+        if (status === MobileUsersData.status.inactive) {
+          continue;
+        }
+
+        await this.clickDeleteIcon(userName);
+        await this.confirmModalAction(true);
+      } catch {
+        // Cleanup is best-effort and remains restricted to registered disposable users.
+      }
+    }
   }
 
   async addGroupFromDropdown(group: { code: string; name: string }) {
     await this.groupSelect().click();
-    const searchInput = this.page.locator('.ant-select-selection-search-input');
+    const searchInput = this.page.locator(".ant-select-selection-search-input");
     const groupApi = this.page
-      .waitForResponse((r) => r.url().includes('/group') && r.request().method() === 'GET', {
-        timeout: 30_000,
-      })
+      .waitForResponse(
+        (r) => r.url().includes("/group") && r.request().method() === "GET",
+        {
+          timeout: 30_000,
+        },
+      )
       .catch(() => undefined);
     await searchInput.fill(group.code);
     await groupApi;
-    const dropdown = this.page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)');
-    const checkbox = dropdown.getByRole('checkbox', { name: `${group.code}-${group.name}` });
+    const dropdown = this.page.locator(
+      ".ant-select-dropdown:not(.ant-select-dropdown-hidden)",
+    );
+    const checkbox = dropdown.getByRole("checkbox", {
+      name: `${group.code}-${group.name}`,
+    });
     await expect(checkbox).toBeVisible({ timeout: 15_000 });
     await checkbox.click();
-    await dropdown.getByRole('button', { name: /Add/i }).click();
+    await dropdown.getByRole("button", { name: /Add/i }).click();
   }
 
   // ── Assertions ──────────────────────────────────────────────────────────────
 
   async expectUserSavedSuccess() {
-    await expect(this.toast(MobileUsersData.messages.userSaved)).toBeVisible({ timeout: 60_000 });
-    await expect(this.page).toHaveURL(new RegExp(MobileUsersData.paths.listing), { timeout: 60_000 });
+    await expect(this.toast(MobileUsersData.messages.userSaved)).toBeVisible({
+      timeout: 60_000,
+    });
+    await expect(this.page).toHaveURL(
+      new RegExp(MobileUsersData.paths.listing),
+      { timeout: 60_000 },
+    );
   }
 
   async expectValidationMessage(text: string | RegExp) {
-    await expect(this.fieldError(text).first().or(this.toast(text).first())).toBeVisible({
+    await expect(
+      this.fieldError(text).first().or(this.toast(text).first()),
+    ).toBeVisible({
       timeout: 15_000,
     });
   }
@@ -1004,7 +1250,9 @@ export class MobileUsersPage {
 
   private waitForBulkUploadResponse() {
     return this.page.waitForResponse(
-      (resp) => resp.url().includes('/user/bulkUpload') && resp.request().method() === 'POST',
+      (resp) =>
+        resp.url().includes("/user/bulkUpload") &&
+        resp.request().method() === "POST",
       { timeout: 180_000 },
     );
   }
@@ -1037,13 +1285,17 @@ export class MobileUsersPage {
   }
 
   async downloadBulkTemplate() {
-    const downloadPromise = this.page.waitForEvent('download', { timeout: 60_000 });
+    const downloadPromise = this.page.waitForEvent("download", {
+      timeout: 60_000,
+    });
     await this.bulkTemplateDownloadButton().click();
     return downloadPromise;
   }
 
   async expectBulkUploadRuleVisible(rule: string | RegExp) {
-    await expect(this.page.getByText(rule).first()).toBeVisible({ timeout: 15_000 });
+    await expect(this.page.getByText(rule).first()).toBeVisible({
+      timeout: 15_000,
+    });
   }
 
   async expectBulkUploadRulesVisible() {
@@ -1053,14 +1305,16 @@ export class MobileUsersPage {
   }
 
   async expectBulkUploadFieldRulesVisible() {
-    const pageText = await this.page.locator('body').innerText();
+    const pageText = await this.page.locator("body").innerText();
     for (const rule of MobileUsersData.bulkUpload.fieldRules) {
       expect(pageText).toMatch(rule.pattern);
     }
   }
 
   async expectBulkUploadHistoryColumnVisible(column: string) {
-    await expect(this.bulkUploadHistoryHeaders().filter({ hasText: column })).toBeVisible();
+    await expect(
+      this.bulkUploadHistoryHeaders().filter({ hasText: column }),
+    ).toBeVisible();
   }
 
   async expectBulkUploadHistoryColumnsVisible() {
@@ -1069,30 +1323,51 @@ export class MobileUsersPage {
     }
   }
 
-  async waitForBulkUploadHistoryRow(fileName: string, options: { timeout?: number } = {}) {
+  async waitForBulkUploadHistoryRow(
+    fileName: string,
+    options: { timeout?: number } = {},
+  ) {
     const timeout = options.timeout ?? 120_000;
     await expect
-      .poll(async () => this.bulkUploadHistoryRow(fileName).count(), { timeout })
+      .poll(async () => this.bulkUploadHistoryRow(fileName).count(), {
+        timeout,
+      })
       .toBeGreaterThan(0);
     return this.bulkUploadHistoryRow(fileName);
   }
 
   async downloadHistoryUploadedFile(fileName: string) {
     const row = await this.waitForBulkUploadHistoryRow(fileName);
-    const downloadPromise = this.page.waitForEvent('download', { timeout: 60_000 });
-    await row.locator('td').nth(1).locator('a, button, [class*="download"], img, svg').first().click();
+    const downloadPromise = this.page.waitForEvent("download", {
+      timeout: 60_000,
+    });
+    await row
+      .locator("td")
+      .nth(1)
+      .locator('a, button, [class*="download"], img, svg')
+      .first()
+      .click();
     return downloadPromise;
   }
 
   async downloadHistoryErrorReport(fileName: string) {
     const row = await this.waitForBulkUploadHistoryRow(fileName);
-    const downloadPromise = this.page.waitForEvent('download', { timeout: 60_000 });
-    await row.locator('td').last().locator('a, button, [class*="download"], img, svg').first().click();
+    const downloadPromise = this.page.waitForEvent("download", {
+      timeout: 60_000,
+    });
+    await row
+      .locator("td")
+      .last()
+      .locator('a, button, [class*="download"], img, svg')
+      .first()
+      .click();
     return downloadPromise;
   }
 
   async expectBulkUploadProcessed() {
-    await expect(this.toast(MobileUsersData.bulkUpload.messages.processed).first()).toBeVisible({
+    await expect(
+      this.toast(MobileUsersData.bulkUpload.messages.processed).first(),
+    ).toBeVisible({
       timeout: 60_000,
     });
   }
@@ -1112,13 +1387,22 @@ export class MobileUsersPage {
   }
 
   async expectFormFieldVisible(fieldLabel: string | RegExp) {
-    await expect(this.page.locator('.mobile-label, .mobile-text-labels, .mobile-radio-lables').filter({
-      hasText: fieldLabel,
-    })).toBeVisible();
+    await expect(
+      this.page
+        .locator(".mobile-label, .mobile-text-labels, .mobile-radio-lables")
+        .filter({
+          hasText: fieldLabel,
+        }),
+    ).toBeVisible();
   }
 
   async expectColumnHeaderVisible(header: string) {
-    await expect(this.tableHeaders().filter({ hasText: header })).toBeVisible();
+    const escaped = header.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    await expect(
+      this.table().getByRole("columnheader", {
+        name: new RegExp(`^${escaped}(?:\\s+caret-(?:up|down))*$`, "i"),
+      }),
+    ).toBeVisible();
   }
 
   async expectHqGroupAssigned() {
@@ -1134,10 +1418,10 @@ export class MobileUsersPage {
   }
 
   async expectPasswordMasked() {
-    await expect(this.passwordInput()).toHaveAttribute('type', 'password');
+    await expect(this.passwordInput()).toHaveAttribute("type", "password");
   }
 
   async expectPasswordUnmasked() {
-    await expect(this.passwordInput()).toHaveAttribute('type', 'text');
+    await expect(this.passwordInput()).toHaveAttribute("type", "text");
   }
 }

@@ -1,11 +1,13 @@
 import { getBaseUrl } from '../config/appConfig';
 
 export const loginData = {
-  baseUrl: getBaseUrl(),
+  get baseUrl() {
+    return getBaseUrl();
+  },
 
-  // Temporary credentials — revert to soham05 / Josh@123 when the main account is restored.
+  // Admin portal credentials (override with VALID_USERNAME / VALID_PASSWORD env vars).
   validUser: process.env.VALID_USERNAME ?? 'ADMIN',
-  validPassword: process.env.VALID_PASSWORD ?? 'ADMIN',
+  validPassword: process.env.VALID_PASSWORD ?? 'Test@123',
 
   invalidUser: 'invalidUser',
   invalidPassword: 'Wrong@123',
