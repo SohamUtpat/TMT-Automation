@@ -22,8 +22,10 @@ export const GroupsData = {
   deleteModal: {
     confirmTitle: 'Are you sure you want to delete group?',
     blockedTitle: 'Delete Group',
-    blockedMessage: /User can.t delete this group as there are users in this group/i,
+    // UI uses a curly apostrophe (’) in "can't" — match either quote style + trailing period.
+    blockedMessage: /User can['\u2019]t delete this group as there are users in this group\./,
     blockedHint: 'Please remove all users from this group, and then you can delete this group',
+    blockedOkButton: 'OK',
   },
 
   createModal: {
@@ -54,11 +56,20 @@ export const GroupsData = {
     replacePng: 'Admin/test-assets/replace-photo.png',
   },
 
+  /**
+   * Build a unique name/code pair for create flows.
+   * Code max is 15 chars — keep prefix short (≤4) so the stamp still fits.
+   * Uses 8-digit time + 3-digit random so stamps don't collide every ~16 minutes
+   * (the old 6-digit Date.now() slice recycled that often and broke create+search).
+   */
   uniqueGroup(prefix: string) {
-    const stamp = Date.now().toString().slice(-6);
+    const stamp = `${Date.now().toString().slice(-8)}${Math.floor(Math.random() * 1000)
+      .toString()
+      .padStart(3, '0')}`;
+    const safePrefix = prefix.slice(0, 4);
     return {
-      name: `${prefix}${stamp}`,
-      code: `${prefix}${stamp}`,
+      name: `${safePrefix}${stamp}`.slice(0, 50),
+      code: `${safePrefix}${stamp}`.slice(0, 15),
     };
   },
 };

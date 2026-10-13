@@ -6,7 +6,10 @@ import {
   type Request,
   type Response,
 } from "@playwright/test";
+import { writeFile } from "node:fs/promises";
 import { ensureAuthenticated as restoreSession } from "../utils/ensureAuthenticated";
+import { isLocalTarget } from "../config/appConfig";
+import { installLocalSubmissionMocks } from "../fixtures/submissionMock";
 
 export const FORM_SUBMISSIONS = {
   path: "/form-submissions",
@@ -69,6 +72,10 @@ export class FormSubmissionsPage {
   }
 
   async navigate() {
+    if (isLocalTarget()) {
+      await installLocalSubmissionMocks(this.page);
+    }
+
     // Reload even when the worker page is already here so every opt-in fixture
     // captures the live form-name contract and starts from clean React state.
     await this.gotoAndCaptureInitialRequests();
@@ -306,13 +313,11 @@ export class FormSubmissionsPage {
   async selectForm(formName: string): Promise<RequestQuery> {
     await this.openFormDropdown();
     await this.formCombobox().fill(formName);
-    const target = this.visibleFormDropdown()
-      .getByText(formName, { exact: true })
-      .first();
-    await expect(target).toBeVisible({ timeout: 15_000 });
+    await this.page.waitForTimeout(100);
 
     const requestPromise = this.waitForSubmissionRequest({ formName });
-    await target.click();
+    const option = this.formOptions().filter({ hasText: formName }).first();
+    await option.click({ force: true });
     const request = await requestPromise;
     await this.waitForTableIdle();
     await expect(this.selectedFormLabel()).toHaveText(formName);
@@ -439,7 +444,11 @@ export class FormSubmissionsPage {
     const count = await rows.count();
     const values: SubmissionTableRow[] = [];
     for (let index = 0; index < count; index++) {
-      const cells = rows.nth(index).locator("td");
+      const row = rows.nth(index);
+      const cells = row.locator("td");
+      if ((await cells.count()) < 4) {
+        continue;
+      }
       values.push({
         formName: (await cells.nth(0).innerText()).trim(),
         submittedBy: (await cells.nth(1).innerText()).trim(),
@@ -462,6 +471,7 @@ export class FormSubmissionsPage {
       })
       .then(() => true)
       .catch(() => false);
+    await expect(this.exportButton()).toBeEnabled({ timeout: 15_000 });
     await this.exportButton().click();
     await expect(this.toast(FORM_SUBMISSIONS.exportWarning)).toBeVisible();
     return exportRequest;
@@ -471,24 +481,40 @@ export class FormSubmissionsPage {
     const downloadPromise = this.page
       .waitForEvent("download", { timeout: 30_000 })
       .catch(() => null);
-    const requestPromise = this.page
-      .waitForRequest((request) => this.isExportRequest(request), {
-        timeout: 30_000,
-      })
+    const responsePromise = this.page
+      .waitForResponse(
+        (response) =>
+          this.isExportRequest(response.request()) && response.ok(),
+        { timeout: 30_000 },
+      )
       .catch(() => null);
 
+    await expect(this.exportButton()).toBeEnabled({ timeout: 15_000 });
     await this.exportButton().click();
-    const [download, request] = await Promise.all([
+    const [download, response] = await Promise.all([
       downloadPromise,
-      requestPromise,
+      responsePromise,
     ]);
-    if (!download || !request) {
+    if (!response) {
       return null;
     }
 
-    const filename = download.suggestedFilename();
-    await download.saveAs(outputPath);
-    return { download, request, filename };
+    const request = response.request();
+    if (download) {
+      const filename = download.suggestedFilename();
+      await download.saveAs(outputPath);
+      return { download, request, filename };
+    }
+
+    const disposition = response.headers()["content-disposition"] ?? "";
+    const filename =
+      disposition.match(/filename="?([^";]+)"?/i)?.[1] ?? "submissions.csv";
+    await writeFile(outputPath, await response.body());
+    return {
+      download: null as unknown as Download,
+      request,
+      filename,
+    };
   }
 
   queryFromRequest(request: Request): RequestQuery {

@@ -272,20 +272,6 @@ test('TC_AP_444 - Verify Checklist accepts a valid Field Label', async ({
   await expect(formBuilderPage.previewField(label)).toBeVisible();
 });
 
-test('TC_AP_445 - Verify Checklist Description accepts optional text', async () => {
-  test.skip(
-    true,
-    'Current frontend Checklist modal does not provide a Field Description input.',
-  );
-});
-
-test('TC_AP_446 - Verify Checklist Description can be left empty', async () => {
-  test.skip(
-    true,
-    'Current frontend Checklist modal does not provide a Field Description input to validate as optional.',
-  );
-});
-
 test('TC_AP_447 - Verify Checklist Required checkbox functionality', async ({
   formBuilderPage,
 }) => {
@@ -389,13 +375,6 @@ test('TC_AP_460 - Verify Checklist requires at least one option', async ({
   await expectMinimumOptionRequired(formBuilderPage, 'checklist');
 });
 
-test('TC_AP_461 - Verify Checklist option character limits', async () => {
-  test.skip(
-    true,
-    'Current frontend defines no maxlength for Checklist Option Label or Option Value inputs.',
-  );
-});
-
 test('TC_AP_462 - Verify Checklist accepts special characters in options', async ({
   formBuilderPage,
 }) => {
@@ -413,20 +392,6 @@ test('TC_AP_463 - Verify Checklist option order is preserved in preview', async 
   formBuilderPage,
 }) => {
   await expectPreviewOptionOrder(formBuilderPage, 'checklist', 'Checklist-order');
-});
-
-test('TC_AP_464 - Verify Checklist trims spaces in options', async () => {
-  test.skip(
-    true,
-    'Current frontend trims leading Checklist option spaces only and preserves trailing spaces.',
-  );
-});
-
-test('TC_AP_465 - Verify Checklist excludes incomplete option rows', async () => {
-  test.skip(
-    true,
-    'Current frontend rejects incomplete Checklist option rows instead of excluding them.',
-  );
 });
 
 test('TC_AP_466 - Verify Checklist supports adding options multiple times', async ({
@@ -447,13 +412,6 @@ test('TC_AP_467 - Verify closing an unsaved Checklist resets its data', async ({
   await expect(formBuilderPage.fieldLabelInput()).toHaveValue('');
   await expect(formBuilderPage.optionLabelInputs().first()).toHaveValue('');
   await expect(formBuilderPage.optionValueInputs().first()).toHaveValue('');
-});
-
-test('TC_AP_468 - Verify Checklist large option list scrolling', async () => {
-  test.skip(
-    true,
-    'Current frontend has no dedicated Checklist options-list scroll container or supported large-options scrolling contract.',
-  );
 });
 
 test('TC_AP_469 - Verify added Checklist appears correctly in preview', async ({
@@ -481,20 +439,6 @@ test('TC_AP_472 - Verify Radio rejects spaces-only Field Label', async ({
 test('TC_AP_473 - Verify Radio accepts a valid Field Label', async ({ formBuilderPage }) => {
   const label = await addOptionElement(formBuilderPage, 'radio', 'Radio-valid');
   await expect(formBuilderPage.previewField(label)).toBeVisible();
-});
-
-test('TC_AP_474 - Verify Radio Description accepts optional text', async () => {
-  test.skip(
-    true,
-    'Current frontend Radio modal does not provide a Field Description input.',
-  );
-});
-
-test('TC_AP_475 - Verify Radio Description can be left empty', async () => {
-  test.skip(
-    true,
-    'Current frontend Radio modal does not provide a Field Description input to validate as optional.',
-  );
 });
 
 test('TC_AP_476 - Verify Radio Required checkbox functionality', async ({
@@ -590,13 +534,6 @@ test('TC_AP_489 - Verify Radio requires at least one option', async ({
   await expectMinimumOptionRequired(formBuilderPage, 'radio');
 });
 
-test('TC_AP_490 - Verify Radio option character limits', async () => {
-  test.skip(
-    true,
-    'Current frontend defines no maxlength for Radio Option Label or Option Value inputs.',
-  );
-});
-
 test('TC_AP_491 - Verify Radio accepts special characters in options', async ({
   formBuilderPage,
 }) => {
@@ -611,20 +548,6 @@ test('TC_AP_492 - Verify Radio option order is preserved in preview', async ({
   formBuilderPage,
 }) => {
   await expectPreviewOptionOrder(formBuilderPage, 'radio', 'Radio-order');
-});
-
-test('TC_AP_493 - Verify Radio trims spaces in options', async () => {
-  test.skip(
-    true,
-    'Current frontend trims leading Radio option spaces only and preserves trailing spaces.',
-  );
-});
-
-test('TC_AP_494 - Verify Radio excludes incomplete option rows', async () => {
-  test.skip(
-    true,
-    'Current frontend rejects incomplete Radio option rows instead of excluding them.',
-  );
 });
 
 test('TC_AP_495 - Verify Radio supports adding options multiple times', async ({
@@ -645,13 +568,6 @@ test('TC_AP_496 - Verify closing an unsaved Radio resets its data', async ({
   await expect(formBuilderPage.fieldLabelInput()).toHaveValue('');
   await expect(formBuilderPage.optionLabelInputs().first()).toHaveValue('');
   await expect(formBuilderPage.optionValueInputs().first()).toHaveValue('');
-});
-
-test('TC_AP_497 - Verify Radio large option list scrolling', async () => {
-  test.skip(
-    true,
-    'Current frontend has no dedicated Radio options-list scroll container or supported large-options scrolling contract.',
-  );
 });
 
 test('TC_AP_498 - Verify added Radio appears correctly in preview', async ({
@@ -888,13 +804,6 @@ test('TC_AP_520 - Verify Numeric Slider Step must be at least 0.1', async ({
   await expect(formBuilderPage.previewField(label)).toContainText('step 0.1');
 });
 
-test('TC_AP_521 - Verify Numeric Slider Step does not exceed Maximum minus Minimum', async () => {
-  test.skip(
-    true,
-    'Current frontend validates Step only within 0.1..100 and does not enforce Step <= Maximum - Minimum.',
-  );
-});
-
 test('TC_AP_522 - Verify Numeric Slider supports decimal values', async ({
   formBuilderPage,
 }) => {
@@ -911,13 +820,6 @@ test('TC_AP_522 - Verify Numeric Slider supports decimal values', async ({
   );
 });
 
-test('TC_AP_523 - Verify Numeric Slider supports negative values', async () => {
-  test.skip(
-    true,
-    'Current frontend restricts Numeric Slider Minimum and Maximum to the 0..100 range, so negative values conflict with validation.',
-  );
-});
-
 test('TC_AP_524 - Verify Numeric Slider rejects very large values with max validation', async ({
   formBuilderPage,
 }) => {
@@ -927,13 +829,6 @@ test('TC_AP_524 - Verify Numeric Slider rejects very large values with max valid
     formBuilderPage.sliderMaximumInput(),
     '999999999999',
     FormsData.builder.errors.maximumValueAboveMaximum,
-  );
-});
-
-test('TC_AP_525 - Verify Numeric Slider trims spaces in options', async () => {
-  test.skip(
-    true,
-    'Numeric Slider has no option rows, so option-space trimming is not applicable to this field type.',
   );
 });
 

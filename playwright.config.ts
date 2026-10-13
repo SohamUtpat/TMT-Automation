@@ -9,6 +9,7 @@ loadEnv(__dirname);
 const authFile = path.join(__dirname, 'playwright/.auth/admin.json');
 const baseURL = getBaseUrl();
 const startFrontend = process.env.START_FRONTEND === '1' || process.env.START_FRONTEND === 'true';
+const frontendPort = process.env.FRONTEND_PORT;
 const frontendDir = process.env.FRONTEND_DIR
   ? path.resolve(__dirname, process.env.FRONTEND_DIR)
   : path.resolve(__dirname, '..', 'gulfnet-tmt-frontend');
@@ -31,14 +32,18 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
   },
-  // When START_FRONTEND=1, boot webpack-dev-server if nothing is already on baseURL.
+  // When START_FRONTEND=1, boot webpack-dev-server (FRONTEND_PORT avoids stale :8000 instances).
   ...(startFrontend && resolveTarget() === 'local'
     ? {
         webServer: {
           command: 'npm run dev',
           cwd: frontendDir,
           url: baseURL,
-          reuseExistingServer: !process.env.CI,
+          env: {
+            FRONTEND_PORT: frontendPort ?? '8000',
+          },
+          reuseExistingServer:
+            process.env.REUSE_EXISTING_FRONTEND === '1' && !process.env.CI,
           timeout: 300_000,
         },
       }
@@ -53,6 +58,8 @@ export default defineConfig({
     {
       name: 'login',
       testMatch: /Login\/.*\.spec\.ts/,
+      // Burst negative logins + local UMS rate-limit cooldowns can exceed 2 minutes.
+      timeout: 300_000,
       use: { ...devices['Desktop Chrome'] },
     },
     {

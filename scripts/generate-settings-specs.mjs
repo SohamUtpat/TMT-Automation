@@ -85,18 +85,6 @@ const specs = {
   expect(api.contact_details).toBe(update.contact);
 });`,
 
-  92: `// import { test } from '../fixtures/settings.fixture';
-//
-// test.skip('TC_AP_92 - Verify URL Maximum Length 50', async () => {
-//   // Invalid test case — URL length limit not enforced in settings form.
-// });`,
-
-  93: `// import { test } from '../fixtures/settings.fixture';
-//
-// test.skip('TC_AP_93 - Verify URL Over 50 Shows Validation', async () => {
-//   // Invalid test case — URL length limit not enforced in settings form.
-// });`,
-
   94: `test('TC_AP_94 - Verify Only Valid URL Format Accepted', async ({ settingsPage }) => {
   await settingsPage.openSupportDetailsEdit();
   await settingsPage.fillSupportForm({ url: 'not-a-valid-url' });
@@ -168,12 +156,12 @@ const specs = {
 
   100: `test('TC_AP_100 - Verify Stamps Can Be Viewed', async ({ settingsPage }) => {
   const { stamps: standardStamps } = await settingsPage.fetchStandardStampsFromApi();
-  test.skip(standardStamps.length === 0, 'No standard stamps returned from API');
+  expect(standardStamps.length, 'No standard stamps returned from API').toBeGreaterThan(0);
 
   await expect(settingsPage.stampPreviewImages().first()).toBeVisible({ timeout: 30_000 });
 
   const { stamps: approvalStamps } = await settingsPage.fetchApprovalStampsFromApi();
-  test.skip(approvalStamps.length === 0, 'No approval stamps returned from API');
+  expect(approvalStamps.length, 'No approval stamps returned from API').toBeGreaterThan(0);
 
   await settingsPage.openSeeAllStamps({ tab: 'approval' });
   expect(await settingsPage.stampImagesInModal().count()).toBeGreaterThan(0);
@@ -183,7 +171,7 @@ const specs = {
 
   101: `test('TC_AP_101 - Verify Stamp Can Be Deleted', async ({ settingsPage }) => {
   const { stamps } = await settingsPage.fetchApprovalStampsFromApi();
-  test.skip(stamps.length === 0, 'No approval stamps available from API to delete');
+  expect(stamps.length, 'No approval stamps available from API to delete').toBeGreaterThan(0);
 
   await settingsPage.openSeeAllStamps({ tab: 'approval' });
   await settingsPage.deleteFirstStampInModal();
@@ -192,7 +180,7 @@ const specs = {
 
   102: `test('TC_AP_102 - Verify Message After Stamp Deletion', async ({ settingsPage }) => {
   const { stamps } = await settingsPage.fetchApprovalStampsFromApi();
-  test.skip(stamps.length === 0, 'No approval stamps available from API to delete');
+  expect(stamps.length, 'No approval stamps available from API to delete').toBeGreaterThan(0);
 
   await settingsPage.openSeeAllStamps({ tab: 'approval' });
   await settingsPage.deleteFirstStampInModal();
@@ -237,18 +225,6 @@ const specs = {
   await settingsPage.closeModal();
 });`,
 
-  108: `// import { test } from '../fixtures/settings.fixture';
-//
-// test.skip('TC_AP_108 - Verify Deleted Stamp Visible In Chat To End User', async () => {
-//   // Invalid / out of scope — requires mobile chat verification.
-// });`,
-
-  109: `// import { test } from '../fixtures/settings.fixture';
-//
-// test.skip('TC_AP_109 - Verify Maximum 100 Stamps In System', async () => {
-//   // Invalid test case — total stamp cap cannot be reliably exercised in UI automation.
-// });`,
-
   110: `test('TC_AP_110 - Verify User Can Add Stamp', async ({ settingsPage }) => {
   await settingsPage.openUploadStamps();
   await settingsPage.uploadStampFiles([SettingsData.testAssets.validStamp]);
@@ -266,19 +242,13 @@ const specs = {
 
   112: `test('TC_AP_112 - Verify Stamps Visible In See All View', async ({ settingsPage }) => {
   const { stamps } = await settingsPage.fetchApprovalStampsFromApi();
-  test.skip(stamps.length === 0, 'No approval stamps returned from API');
+  expect(stamps.length, 'No approval stamps returned from API').toBeGreaterThan(0);
 
   await settingsPage.openSeeAllStamps({ tab: 'approval' });
   await expect(settingsPage.stampImagesInModal().first()).toBeVisible({ timeout: 30_000 });
   await expect(settingsPage.stampDeleteIcons().first()).toBeVisible();
   await settingsPage.closeModal();
 });`,
-
-  113: `// import { test } from '../fixtures/settings.fixture';
-//
-// test.skip('TC_AP_113 - Verify Stamps Visible On Mobile App', async () => {
-//   // Requires GulfTMT mobile application — out of admin portal automation scope.
-// });`,
 
   114: `test('TC_AP_114 - Verify Language Preference Can Be Set', async ({ settingsPage }) => {
   await settingsPage.updateSupportDetails({ languageLabel: SettingsData.languages.thai.label });
@@ -329,11 +299,9 @@ const ids = Object.keys(specs)
   .map(Number)
   .sort((a, b) => a - b);
 
-const commentedOnly = new Set([92, 93, 108, 109, 113]);
-
 for (const id of ids) {
   const file = path.join(outDir, `TC-${id}.spec.ts`);
-  const content = commentedOnly.has(id) ? `${specs[id]}\n` : `${header}\n${specs[id]}\n`;
+  const content = `${header}\n${specs[id]}\n`;
   fs.writeFileSync(file, content);
   console.log(`Wrote ${file}`);
 }

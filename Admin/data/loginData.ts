@@ -20,6 +20,11 @@ export const loginData = {
   mobilePassword: process.env.MOBILE_PASSWORD ?? 'mobilepassword',
 
   invalidCredentialsMessage: 'Invalid username or password',
+  // UMS also returns this for a known user + wrong password; FE may show it until rebuilt.
+  invalidCredentialsMessages: [
+    'Invalid username or password',
+    'Please provide the correct username or password.',
+  ],
   usernameRequiredMessage: 'Username is required',
   passwordRequiredMessage: 'Password is required',
 };

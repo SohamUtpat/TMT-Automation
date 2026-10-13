@@ -59,6 +59,7 @@ export const FormsData = {
       addOption: "Add option",
       upload: "Upload",
       imagePreviewAlt: "Preview",
+      imageAccept: ".png,.jpg,.jpeg",
       chooseFile: "Choose File",
       remove: "Remove",
       cancel: "Cancel",
@@ -193,10 +194,11 @@ export const FormsData = {
 
   assignModal: {
     titlePattern: /Assign Groups/i,
-    selectGroupsLabel: /Search and select groups/i,
+    selectGroupsLabel: /Select Groups/i,
+    searchGroupsPlaceholder: /Search and select groups/i,
     saveButton: /^save$/i,
     cancelButton: /^cancel$/i,
-    noDataFound: /no data(?: found)?|no groups found/i,
+    noDataFound: /no data(?: found)?|no groups found|no groups available/i,
   },
 
   messages: {

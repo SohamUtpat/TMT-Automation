@@ -70,12 +70,13 @@ export class FormsPage {
   }
 
   async ensureFormsReady() {
+    await this.ensureAuthenticated();
+
     if (!this.isOnFormsListPage()) {
       await this.navigateToForms();
       return;
     }
 
-    await this.ensureAuthenticated();
     await this.expectFormsLoaded();
   }
 
@@ -108,13 +109,6 @@ export class FormsPage {
         .isVisible()
         .catch(() => false)
     ) {
-      if (
-        await this.assignDropdown()
-          .isVisible()
-          .catch(() => false)
-      ) {
-        await this.closeAssignGroupsDropdown().catch(() => undefined);
-      }
       await this.cancelAssignModal().catch(() => undefined);
     }
 
@@ -238,11 +232,14 @@ export class FormsPage {
   assignModalCloseIcon = () =>
     this.assignModal().getByRole("button", { name: "Close" });
 
-  assignGroupsSelect = () => this.assignModal().getByRole("combobox");
+  assignGroupsSelect = () => this.assignGroupsSearchInput();
+
+  assignGroupsSearchInput = () =>
+    this.assignModal().getByPlaceholder(FormsData.assignModal.searchGroupsPlaceholder);
 
   assignSelectedGroupTags = () =>
     this.assignModal()
-      .locator(".ant-select-selection-item, button")
+      .locator(".forms-assign-groups-modal__chip")
       .filter({ hasText: /.+/ });
 
   assignSaveButton = () =>
@@ -255,21 +252,23 @@ export class FormsPage {
       name: FormsData.assignModal.cancelButton,
     });
 
-  assignDropdown = () =>
-    this.page.locator(".ant-select-dropdown:not(.ant-select-dropdown-hidden)");
+  assignDropdown = () => this.assignGroupsList();
+
+  assignGroupsList = () =>
+    this.assignModal().locator(".forms-assign-groups-modal__list");
 
   assignDropdownOptions = () =>
-    this.assignDropdown().locator(".ant-select-item-option");
+    this.assignGroupsList().locator(".forms-assign-groups-modal__option");
 
-  assignCheckboxes = () => this.assignDropdown().getByRole("checkbox");
+  assignCheckboxes = () => this.assignGroupsList().getByRole("checkbox");
 
   assignSelectedGroupTag = (label: string | RegExp) =>
     this.assignModal()
-      .locator("span:has(> .anticon-close)")
+      .locator(".forms-assign-groups-modal__chip")
       .filter({ hasText: label });
 
   assignNoDataMessage = () =>
-    this.assignDropdown().getByText(FormsData.assignModal.noDataFound);
+    this.assignGroupsList().locator(".ant-empty-description");
 
   toast = (text: string | RegExp) =>
     this.page.locator(".ant-message-notice-content").filter({ hasText: text });
@@ -554,26 +553,25 @@ export class FormsPage {
   }
 
   async openAssignGroupsDropdown() {
-    await this.assignGroupsSelect().click();
-    await expect(this.assignDropdown()).toBeVisible({ timeout: 15_000 });
+    await expect(this.assignGroupsSearchInput()).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(this.assignGroupsList()).toBeVisible({ timeout: 15_000 });
   }
 
   async closeAssignGroupsDropdown() {
     await this.assignModalTitle().click();
-    await expect(this.assignDropdown()).toBeHidden({ timeout: 15_000 });
   }
 
   async getAssignCheckboxLabels(): Promise<string[]> {
-    return this.assignCheckboxes().evaluateAll((els) =>
-      els.map((el) =>
-        (el.closest("label")?.textContent ?? el.textContent ?? "").trim(),
-      ),
+    return this.assignDropdownOptions().evaluateAll((els) =>
+      els.map((el) => (el.textContent ?? "").replace(/\s+/g, " ").trim()),
     );
   }
 
   async selectGroupInAssignDropdown(label: string | RegExp) {
     await this.openAssignGroupsDropdown();
-    const checkbox = this.assignDropdown().getByRole("checkbox", {
+    const checkbox = this.assignGroupsList().getByRole("checkbox", {
       name: label,
     });
     await expect(checkbox).toBeVisible({ timeout: 15_000 });
@@ -586,20 +584,16 @@ export class FormsPage {
 
   async selectFirstUnselectedGroupInAssignDropdown(): Promise<string> {
     await this.openAssignGroupsDropdown();
-    const checkboxes = this.assignCheckboxes();
-    const count = await checkboxes.count();
+    const options = this.assignDropdownOptions();
+    const count = await options.count();
 
     for (let index = 0; index < count; index++) {
-      const checkbox = checkboxes.nth(index);
+      const option = options.nth(index);
+      const checkbox = option.getByRole("checkbox");
       if (!(await checkbox.isChecked())) {
-        const label = (
-          await checkbox.evaluate(
-            (element) =>
-              element.closest("label")?.textContent ??
-              element.textContent ??
-              "",
-          )
-        ).trim();
+        const label = ((await option.textContent()) ?? "")
+          .replace(/\s+/g, " ")
+          .trim();
         expect(label).not.toBe("");
         await checkbox.click();
         await expect(checkbox).toBeChecked();
@@ -615,7 +609,7 @@ export class FormsPage {
 
   async unselectGroupInAssignDropdown(label: string | RegExp) {
     await this.openAssignGroupsDropdown();
-    const checkbox = this.assignDropdown().getByRole("checkbox", {
+    const checkbox = this.assignGroupsList().getByRole("checkbox", {
       name: label,
     });
     await expect(checkbox).toBeVisible({ timeout: 15_000 });
@@ -629,19 +623,12 @@ export class FormsPage {
   async removeSelectedGroupTag(label: string | RegExp) {
     const tag = this.assignSelectedGroupTag(label);
     await expect(tag).toBeVisible();
-    await tag.locator(".anticon-close").click();
+    await tag.getByRole("button").click();
     await expect(tag).toHaveCount(0);
   }
 
   async searchGroupsInAssignModal(term: string) {
-    if (
-      !(await this.assignDropdown()
-        .isVisible()
-        .catch(() => false))
-    ) {
-      await this.openAssignGroupsDropdown();
-    }
-    const searchInput = this.assignGroupsSelect();
+    const searchInput = this.assignGroupsSearchInput();
     await searchInput.fill(term);
     await expect(searchInput).toHaveValue(term);
   }

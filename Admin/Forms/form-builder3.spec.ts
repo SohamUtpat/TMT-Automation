@@ -593,7 +593,10 @@ async function runSimpleCase(
         : formBuilderPage.previewFileInput(label);
   await expect(input).toBeVisible();
   if (type === "imageUpload")
-    await expect(input).toHaveAttribute("accept", "image/*");
+    await expect(input).toHaveAttribute(
+      "accept",
+      FormsData.builder.labels.imageAccept,
+    );
   if (type === "imageUpload" || type === "fileUpload") {
     expect(
       await input.evaluate(

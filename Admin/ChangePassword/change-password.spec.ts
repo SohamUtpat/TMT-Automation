@@ -31,8 +31,10 @@ test('TC_AP_55 - Verify Password Changed With Valid Old And New Passwords', asyn
 }) => {
   const newPassword = ChangePasswordData.buildAlternatePassword(testUser.password);
   await changePasswordPage.navigateToChangePassword();
-  await changePasswordPage.changePasswordComplete(testUser.password, newPassword);
-  testUser.password = newPassword;
+  await changePasswordPage.changePasswordAndExpectLogout(testUser.password, newPassword);
+  if (changePasswordPage.wasPasswordChangedOnServer()) {
+    testUser.password = newPassword;
+  }
 });
 
 test('TC_AP_56 - Verify Incorrect Old Password Shows Error', async ({ changePasswordPage, testUser }) => {

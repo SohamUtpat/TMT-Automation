@@ -82,10 +82,12 @@ test('TC_AP_126 - Verify Group Delete Blocked When Users Exist', async ({ groups
 
   await groupsPage.clickDeleteGroup(group.name);
 
-  await expect(groupsPage.deleteBlockedModal()).toBeVisible();
-  await expect(groupsPage.page.getByText(GroupsData.deleteModal.blockedTitle)).toBeVisible();
-  await expect(groupsPage.page.getByText(GroupsData.deleteModal.blockedMessage)).toBeVisible();
-  await expect(groupsPage.page.getByText(GroupsData.deleteModal.blockedHint)).toBeVisible();
+  const blockedModal = groupsPage.deleteBlockedModal();
+  await expect(blockedModal).toBeVisible();
+  await expect(blockedModal.getByText(GroupsData.deleteModal.blockedTitle, { exact: true })).toBeVisible();
+  await expect(blockedModal.getByText(GroupsData.deleteModal.blockedMessage)).toBeVisible();
+  await expect(blockedModal.getByText(GroupsData.deleteModal.blockedHint)).toBeVisible();
+  await expect(blockedModal.getByRole('button', { name: GroupsData.deleteModal.blockedOkButton })).toBeVisible();
 
   await groupsPage.dismissBlockedDelete();
 });
@@ -108,17 +110,21 @@ test('TC_AP_127 - Verify Group Deleted When Total Members Is Zero', async ({ gro
 });
 
 test('TC_AP_128 - Verify Group Name and Code Trim Spaces', async ({ groupsPage }) => {
-  const group = GroupsData.uniqueGroup('Trim');
+  // Keep code ≤13 so leading/trailing spaces still pass client length checks
+  // (UI trimStart keeps trailing spaces until submit .trim()).
+  const stamp = Date.now().toString().slice(-6);
+  const name = `Trim${stamp}`;
+  const code = `T${stamp}`;
 
   await groupsPage.openCreateGroupModal();
-  await groupsPage.fillCreateForm(`  ${group.name}  `, `  ${group.code}  `);
+  await groupsPage.fillCreateForm(`  ${name}  `, `  ${code}  `);
   await groupsPage.submitCreateAndWait();
-  await groupsPage.searchGroups(group.name);
+  await groupsPage.searchGroups(name);
 
-  await groupsPage.expectGroupVisible(group.name);
-  await expect(groupsPage.groupRow(group.name).locator('td').nth(1)).toHaveText(group.name);
+  await groupsPage.expectGroupVisible(name);
+  await expect(groupsPage.groupRow(name).locator('td').nth(1)).toHaveText(name);
 
-  await groupsPage.deleteGroupIfPossible(group.name);
+  await groupsPage.deleteGroupIfPossible(name);
   await groupsPage.clearSearch();
 });
 

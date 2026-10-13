@@ -1,6 +1,7 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import { ChangeLanguageData } from '../data/ChangeLanguageData';
 import { ensureAuthenticated as restoreSession } from '../utils/ensureAuthenticated';
+import { expectAdminPageReady } from '../utils/pageReady';
 
 type LanguageKey = keyof typeof ChangeLanguageData.languages;
 
@@ -12,9 +13,12 @@ export class ChangeLanguagePage {
     this.page = page;
   }
 
-  profileDropdown = () => this.page.locator('.dropdown-trigger');
+  profileDropdown = () => this.page.getByRole('button', { name: /more actions/i });
 
-  changeLanguageMenuItem = () => this.page.locator('a[href="/profile/change-language"]');
+  changeLanguageMenuItem = () =>
+    this.page.getByRole('link', { name: ChangeLanguageData.buttons.changeLanguage });
+
+  changeLanguagePageTitle = () => this.page.locator('.account-page-heading h1');
 
   languageRadio = (label: string) => this.page.getByRole('radio', { name: label, exact: true });
 
@@ -76,7 +80,7 @@ export class ChangeLanguagePage {
 
   private async isChangeLanguageContentReady(): Promise<boolean> {
     const [titleVisible, confirmVisible, radioVisible] = await Promise.all([
-      this.page.locator('#pageTitle').isVisible().catch(() => false),
+      this.changeLanguagePageTitle().isVisible().catch(() => false),
       this.confirmLanguageButton().isVisible().catch(() => false),
       this.languageRadio(ChangeLanguageData.languages.english.label).isVisible().catch(() => false),
     ]);
@@ -95,7 +99,7 @@ export class ChangeLanguagePage {
       });
     }
 
-    await expect(this.page.locator('#pageTitle')).toBeVisible({ timeout: 30_000 });
+    await expect(this.changeLanguagePageTitle()).toBeVisible({ timeout: 30_000 });
     await expect(this.languageRadio(ChangeLanguageData.languages.english.label)).toBeVisible({
       timeout: 30_000,
     });
@@ -109,12 +113,12 @@ export class ChangeLanguagePage {
   /** Lighter check for TC_AP_64 — validates menu access without waiting for full form hydration each time. */
   async expectAccessibleFromPage(path: string, pageTitle: string) {
     await this.page.goto(path, { waitUntil: 'commit', timeout: 60_000 });
-    await expect(this.page.locator('#pageTitle')).toHaveText(pageTitle, { timeout: 30_000 });
+    await expectAdminPageReady(this.page, path, pageTitle);
     await this.profileDropdown().click();
     await expect(this.changeLanguageMenuItem()).toBeVisible({ timeout: 10_000 });
     await this.changeLanguageMenuItem().click();
     await expect(this.page).toHaveURL(new RegExp(`${ChangeLanguageData.path}$`), { timeout: 30_000 });
-    await expect(this.page.locator('#pageTitle')).toBeVisible({ timeout: 15_000 });
+    await expect(this.changeLanguagePageTitle()).toBeVisible({ timeout: 15_000 });
   }
 
   async selectLanguage(label: string) {
@@ -167,7 +171,7 @@ export class ChangeLanguagePage {
   }
 
   async expectChangeLanguagePageTitleForLanguage(key: LanguageKey) {
-    await expect(this.page.locator('#pageTitle')).toHaveText(this.languageByKey(key).changeLanguagePageTitle);
+    await expect(this.changeLanguagePageTitle()).toHaveText(this.languageByKey(key).changeLanguagePageTitle);
   }
 
   async changeLanguageAndVerify(key: LanguageKey) {
@@ -198,6 +202,10 @@ export class ChangeLanguagePage {
   }
 
   private async readPageTitle(): Promise<string> {
+    if (this.isOnChangeLanguagePage()) {
+      return (await this.changeLanguagePageTitle().textContent())?.trim() ?? '';
+    }
+
     return (await this.page.locator('#pageTitle').textContent())?.trim() ?? '';
   }
 

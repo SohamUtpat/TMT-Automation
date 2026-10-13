@@ -7,9 +7,10 @@ export const GROUP_TABLE_COL = {
   icon: 0,
   name: 1,
   code: 2,
-  createdOn: 3,
-  members: 4,
-  actions: 5,
+  category: 3,
+  createdOn: 4,
+  members: 5,
+  actions: 6,
 } as const;
 
 export type GroupTableColumn = keyof typeof GROUP_TABLE_COL;
@@ -47,7 +48,7 @@ export class GroupsPage {
       }
     }
 
-    await this.landOnDashboard();
+    await this.ensureAuthenticated();
     await this.openGroupsFromShell();
     await this.expectGroupsLoaded();
   }
@@ -135,57 +136,29 @@ export class GroupsPage {
       .catch(() => undefined);
   }
 
-  private async landOnDashboard() {
-    await this.ensureAuthenticated();
-
-    if (
-      /\/dashboard(?:\/|$|\?)/.test(this.page.url()) &&
-      (await this.page.locator('#pageTitle').isVisible().catch(() => false))
-    ) {
-      return;
-    }
-
-    const dashboardApi = this.page
-      .waitForResponse(
-        (resp) => resp.url().includes('/dashboard') && resp.request().method() === 'GET',
-        { timeout: 90_000 },
-      )
-      .catch(() => undefined);
-    const bundle = this.waitForBundle();
-    await this.page.goto('/dashboard', { waitUntil: 'commit', timeout: 120_000 });
-    await Promise.all([dashboardApi, bundle]);
-    await this.ensureAuthenticated();
-    await this.page.locator('#pageTitle').waitFor({ state: 'visible', timeout: 120_000 });
-  }
-
+  /**
+   * Ant Design Menu items are not `<a href>` links (onClick + navigate), and the
+   * accessible name includes the icon label (e.g. "team Groups"). Prefer a direct
+   * route load so we do not hang waiting for a dead click + 60s search timeout.
+   */
   private async openGroupsFromShell() {
     if (this.isOnGroupsListPage() && (await this.createGroupButton().isVisible().catch(() => false))) {
       return;
     }
 
     const groupApi = this.waitForGroupListResponse();
-    const groupsEntry = this.page
-      .locator('a[href="/groups"]')
-      .or(this.page.getByRole('link', { name: /^groups$/i }))
-      .or(this.page.getByRole('menuitem', { name: /^groups$/i }))
-      .first();
+    await this.page.goto('/groups', { waitUntil: 'commit', timeout: 90_000 });
+    await this.ensureAuthenticated();
 
-    if (await groupsEntry.isVisible().catch(() => false)) {
-      await groupsEntry.click();
-    } else {
-      const totalGroupsCard = this.page.locator('.dashboard-item').filter({
-        has: this.page.locator('p.title', { hasText: 'Total Groups' }),
-      });
-      if (await totalGroupsCard.isVisible().catch(() => false)) {
-        await totalGroupsCard.click();
-      } else {
-        const bundle = this.waitForBundle();
-        await this.page.goto('/groups', { waitUntil: 'commit', timeout: 90_000 });
-        await bundle;
+    if (!this.isOnGroupsListPage()) {
+      const groupsEntry = this.page.getByRole('menuitem', { name: /groups/i }).first();
+      if (await groupsEntry.isVisible().catch(() => false)) {
+        await groupsEntry.click();
       }
     }
 
     await groupApi;
+    await this.page.waitForURL(/\/groups(?:\/|$|\?)/, { timeout: 60_000 }).catch(() => undefined);
     await this.page
       .locator('#pageTitle')
       .filter({ hasText: 'Groups' })
@@ -262,7 +235,7 @@ export class GroupsPage {
     });
 
   sortHeader = (column: string) =>
-    this.page.locator('th').filter({ hasText: new RegExp(column, 'i') });
+    this.page.getByRole('columnheader', { name: new RegExp(column, 'i') });
 
   pagination = () => this.page.locator('.ant-pagination');
 
@@ -466,8 +439,12 @@ export class GroupsPage {
 
   async clickSort(column: string, order: 'asc' | 'desc' = 'asc') {
     const iconTitle = order === 'asc' ? 'Sort Ascending' : 'Sort Descending';
-    await this.sortHeader(column).getByTitle(iconTitle).click();
-    await this.waitForGroupListResponse();
+    // Register the waiter before clicking so a fast API response is not missed.
+    const response = this.waitForGroupListResponse();
+    await this.sortHeader(column)
+      .getByRole('button', { name: iconTitle })
+      .click();
+    await response;
     await this.waitForTableLoaded();
   }
 
@@ -523,7 +500,8 @@ export class GroupsPage {
     await input.scrollIntoViewIfNeeded();
     await expect(input).toBeVisible({ timeout: 15_000 });
     await expect(input).toBeEnabled({ timeout: 15_000 });
-    await input.fill(value, { force: true });
+    await input.click({ force: true });
+    await input.fill(value);
     await input.press('Tab');
   }
 
@@ -552,15 +530,59 @@ export class GroupsPage {
 
   async submitCreateAndWait() {
     const createRequest = this.page.waitForResponse(
-      (resp) => resp.url().includes('/group') && resp.request().method() === 'POST',
+      (resp) =>
+        /\/group(?:\/|$|\?)/.test(new URL(resp.url()).pathname) &&
+        resp.request().method() === 'POST' &&
+        !resp.url().includes('/reactivate'),
       { timeout: 30_000 },
     );
     await this.submitCreate();
-    await createRequest;
+    const response = await createRequest;
+    const status = response.status();
+    const bodyText = await response.text().catch(() => '');
+    let body: {
+      status?: number;
+      message?: string;
+      error?: { errorCode?: number; message?: string };
+      errors?: Array<{ errorMessage?: string }>;
+    } = {};
+    try {
+      body = JSON.parse(bodyText) as typeof body;
+    } catch {
+      body = { message: bodyText.slice(0, 300) };
+    }
+
+    // Soft-deleted collision: UI opens reactivate instead of closing create modal.
+    const reactivateModal = this.page.getByText(/reactivate/i).first();
+    if (await reactivateModal.isVisible().catch(() => false)) {
+      const confirm = this.page.getByRole('button', { name: /ok|yes|confirm|reactivate/i }).first();
+      if (await confirm.isVisible().catch(() => false)) {
+        const listReload = this.waitForGroupListResponse();
+        await confirm.click();
+        await listReload.catch(() => undefined);
+      }
+    }
+
     await this.createModal()
       .waitFor({ state: 'hidden', timeout: 30_000 })
       .catch(() => undefined);
-    await this.waitForGroupListResponse();
+
+    const modalStillOpen = await this.createModal().isVisible().catch(() => false);
+    if (modalStillOpen) {
+      const apiMessage =
+        body.error?.message || body.errors?.[0]?.errorMessage || body.message || bodyText.slice(0, 300);
+      throw new Error(
+        `Create group failed — modal still open after POST ${status}. ${apiMessage}`.trim(),
+      );
+    }
+
+    if (status >= 400 || body.status === 1) {
+      const apiMessage =
+        body.error?.message || body.errors?.[0]?.errorMessage || body.message || bodyText.slice(0, 300);
+      throw new Error(`Create group API rejected with HTTP ${status}: ${apiMessage}`);
+    }
+
+    await this.waitForGroupListResponse().catch(() => undefined);
   }
 
   async submitCreateAndExpectDuplicate() {

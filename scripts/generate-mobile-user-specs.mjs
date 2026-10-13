@@ -115,12 +115,6 @@ const specs = {
   await mobileUsersPage.expectUploadError(MobileUsersData.validation.invalidImageFormat);
 });`,
 
-  164: `// import { test } from '../fixtures/mobile-users.fixture';
-//
-// test.skip('TC_AP_164 - Verify Profile Photo In Mobile App', async () => {
-//   // Requires mobile app login — out of admin portal automation scope.
-// });`,
-
   165: `test('TC_AP_165 - Verify HQ Role Assignment', async ({ mobileUsersPage }) => {
   const user = MobileUsersData.buildValidUser({ roleHqYes: true, deleteMsgYes: false });
   await mobileUsersPage.createMobileUser(user);
@@ -165,12 +159,6 @@ const specs = {
   const groups = await mobileUsersPage.getColumnValues('groups');
   expect(groups[0].length).toBeGreaterThan(0);
 });`,
-
-  170: `// import { test } from '../fixtures/mobile-users.fixture';
-//
-// test.skip('TC_AP_170 - Verify User Reflects In Mobile App', async () => {
-//   // Requires mobile app access — out of admin portal automation scope.
-// });`,
 };
 
 // Fix TC-160 - remove invalid createModal reference
@@ -289,28 +277,6 @@ Object.assign(specs, {
   await mobileUsersPage.expectValidationMessage(MobileUsersData.validation.invalidMobile);
 });`,
 
-  183: `test('TC_AP_183 - Verify Doraku Code Max Length 20', async ({ mobileUsersPage }) => {
-  test.skip(!(await mobileUsersPage.dorakuInput().isVisible().catch(() => false)), 'Doraku integration disabled');
-  const user = MobileUsersData.buildValidUser({ dorakuCode: TestDataGenerator.generateLongString(20) });
-  await mobileUsersPage.createMobileUser(user);
-});`,
-
-  184: `test('TC_AP_184 - Verify Doraku Over 20 Shows Validation', async ({ mobileUsersPage }) => {
-  await mobileUsersPage.clickCreateUser();
-  if (!(await mobileUsersPage.dorakuInput().isVisible().catch(() => false))) test.skip(true, 'Doraku disabled');
-  await mobileUsersPage.fillCreateUserForm({ dorakuCode: TestDataGenerator.generateLongString(21) });
-  await mobileUsersPage.submitCreateUser();
-  await mobileUsersPage.expectValidationMessage(MobileUsersData.validation.dorakuMaxLength);
-});`,
-
-  185: `test('TC_AP_185 - Verify Doraku Accepts Integers Only', async ({ mobileUsersPage }) => {
-  await mobileUsersPage.clickCreateUser();
-  if (!(await mobileUsersPage.dorakuInput().isVisible().catch(() => false))) test.skip(true, 'Doraku disabled');
-  await mobileUsersPage.fillCreateUserForm({ dorakuCode: 'abc@#$' });
-  await mobileUsersPage.submitCreateUser();
-  await mobileUsersPage.expectValidationMessage(MobileUsersData.validation.invalidDoraku);
-});`,
-
   186: `test('TC_AP_186 - Verify User Cannot Be Created With Invalid Inputs', async ({ mobileUsersPage }) => {
   await mobileUsersPage.clickCreateUser();
   await mobileUsersPage.fillCreateUserForm({
@@ -322,10 +288,6 @@ Object.assign(specs, {
   });
   await mobileUsersPage.submitCreateUser();
   await expect(mobileUsersPage.firstNameInput()).toBeVisible();
-});`,
-
-  187: `test.skip('TC_AP_187 - Verify Created User Receives Email', async () => {
-  // Email delivery cannot be verified from admin portal automation.
 });`,
 
   188: `test('TC_AP_188 - Verify Status Active By Default', async ({ mobileUsersPage }) => {
@@ -358,23 +320,6 @@ Object.assign(specs, {
   await mobileUsersPage.searchUsers(user.userName);
   await mobileUsersPage.openEditUser(user.userName);
   await expect(mobileUsersPage.userNameInput()).toBeDisabled();
-});`,
-
-  191: `// import { test } from '../fixtures/mobile-users.fixture';
-//
-// test.skip('TC_AP_191 - Verify Old Username Cannot Login Mobile App', async () => {
-//   // Invalid / out of scope — requires mobile app login.
-// });`,
-
-  192: `// import { test, expect } from '../fixtures/mobile-users.fixture';
-// import { MobileUsersData } from '../data/MobileUsersData';
-//
-// test.skip('TC_AP_192 - Verify Edit Keeps Same Username', async ({ mobileUsersPage }) => {
-//   // Invalid test case — commented out per test plan.
-// });`,
-
-  193: `test.skip('TC_AP_193 - Verify Email Update Delivery', async () => {
-  // Email delivery cannot be verified from admin portal automation.
 });`,
 
   194: `test('TC_AP_194 - Verify Status Field On Edit Form', async ({ mobileUsersPage }) => {
@@ -414,18 +359,6 @@ Object.assign(specs, {
   await mobileUsersPage.searchUsers(user.userName);
   expect(await mobileUsersPage.getColumnValues('roleHq')).toContain(MobileUsersData.roles.yes);
   expect(await mobileUsersPage.getColumnValues('deleteMsg')).toContain(MobileUsersData.roles.yes);
-});`,
-
-  197: `test.skip('TC_AP_197 - Verify Inactive User Cannot Login Mobile App', async () => {
-  // Requires mobile app login — out of scope.
-});`,
-
-  198: `test.skip('TC_AP_198 - Verify Monthly Budget Points Update', async () => {
-  // Monthly budget points field not present in current frontend build.
-});`,
-
-  199: `test.skip('TC_AP_199 - Verify Remaining Budget Points On Edit', async () => {
-  // Remaining budget points field not present in current frontend build.
 });`,
 });
 
@@ -506,7 +439,7 @@ Object.assign(specs, {
 
   208: `test('TC_AP_208 - Verify Sorting On Listing', async ({ mobileUsersPage }) => {
   const { users } = await mobileUsersPage.fetchMobileUsers();
-  test.skip(users.length < 2, 'Need at least 2 mobile users from API to verify sorting');
+  expect(users.length, 'Need at least 2 mobile users from API to verify sorting').toBeGreaterThanOrEqual(2);
   await mobileUsersPage.clickSort('Username', 'asc');
   const asc = await mobileUsersPage.getColumnValues('userName');
   expect(asc).toEqual([...asc].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' })));
@@ -532,24 +465,6 @@ Object.assign(specs, {
   const rows = await mobileUsersPage.getVisibleRowCount();
   expect(rows).toBeGreaterThan(0);
   expect(rows).toBeLessThanOrEqual(filtered.total);
-});`,
-
-  211: `test('TC_AP_211 - Verify Roles Filter', async ({ mobileUsersPage }) => {
-  await mobileUsersPage.openFilterModal();
-  await mobileUsersPage.selectFilterTab('Roles');
-  await mobileUsersPage.toggleFilterCheckbox('HQ');
-  await mobileUsersPage.applyFilter();
-  const hqCol = await mobileUsersPage.getColumnValues('roleHq');
-  expect(hqCol.every((v) => v === MobileUsersData.roles.yes || v === '-')).toBe(true);
-});`,
-
-  212: `test('TC_AP_212 - Verify Status Filter', async ({ mobileUsersPage }) => {
-  await mobileUsersPage.openFilterModal();
-  await mobileUsersPage.selectFilterTab('Status');
-  await mobileUsersPage.toggleFilterCheckbox('Active');
-  await mobileUsersPage.applyFilter();
-  const statuses = await mobileUsersPage.getColumnValues('status');
-  expect(statuses.every((s) => s === MobileUsersData.status.active)).toBe(true);
 });`,
 
   213: `test('TC_AP_213 - Verify Filter Select All Groups', async ({ mobileUsersPage }) => {
@@ -591,10 +506,6 @@ Object.assign(specs, {
   await mobileUsersPage.expectPasswordMasked();
   await mobileUsersPage.togglePasswordVisibility();
   await mobileUsersPage.expectPasswordUnmasked();
-});`,
-
-  218: `test.skip('TC_AP_218 - Verify Password Communicated Via Email', async () => {
-  // Email delivery cannot be verified from admin portal automation.
 });`,
 
   219: `test('TC_AP_219 - Verify Password Not On Update Form', async ({ mobileUsersPage }) => {
@@ -646,7 +557,6 @@ specs[200] = `test('TC_AP_200 - Verify Listing Columns', async ({ mobileUsersPag
 for (let id = 157; id <= 221; id++) {
   const body = specs[id];
   if (!body) {
-    console.warn('Missing spec', id);
     continue;
   }
   const file = path.join(outDir, `TC-${id}.spec.ts`);

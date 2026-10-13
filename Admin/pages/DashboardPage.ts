@@ -48,10 +48,53 @@ export class DashboardPage {
   private waitForDashboardResponse() {
     return this.page
       .waitForResponse(
-        (resp) => resp.url().includes('/dashboard') && resp.request().method() === 'GET',
+        (resp) =>
+          resp.url().includes('/user-management-service/dashboard') &&
+          resp.request().method() === 'GET' &&
+          resp.ok(),
         { timeout: 60_000 },
       )
+      .then(async (resp) => {
+        await this.cacheCountsFromResponse(resp);
+        return resp;
+      })
       .catch(() => undefined);
+  }
+
+  private async cacheCountsFromResponse(
+    response: Awaited<ReturnType<Page['waitForResponse']>>,
+  ): Promise<void> {
+    try {
+      const body = await response.json();
+      const counts = this.parseDashboardCounts(body);
+      if (counts) {
+        this.dashboardCountsCache = counts;
+      }
+    } catch {
+      // Fall back to a direct API request in fetchDashboardCounts.
+    }
+  }
+
+  private parseDashboardCounts(body: unknown): DashboardCounts | null {
+    const dashboard = (body as { data?: { dashboard?: Record<string, unknown> } })?.data
+      ?.dashboard;
+
+    if (!dashboard || typeof dashboard !== 'object') {
+      return null;
+    }
+
+    const readCount = (key: string): number => {
+      const value = dashboard[key];
+      return typeof value === 'number' ? value : Number(value ?? 0);
+    };
+
+    return {
+      mobileUsers: readCount('totalMobileUsers'),
+      groups: readCount('totalGroups'),
+      admins: readCount('totalAdminUsers'),
+      hqMembers: readCount('totalHQMobileUsers'),
+      usersCanDelete: readCount('totalDeleteMobileUsers'),
+    };
   }
 
   async navigateToDashboard() {
@@ -133,6 +176,15 @@ export class DashboardPage {
       return this.dashboardCountsCache;
     }
 
+    // Prefer reusing the UI's dashboard XHR (same proxy path the SPA uses).
+    const networkWait = this.waitForDashboardResponse();
+    await this.page.reload({ waitUntil: 'commit', timeout: 120_000 });
+    await networkWait;
+
+    if (this.dashboardCountsCache) {
+      return this.dashboardCountsCache;
+    }
+
     const token = await this.page.evaluate(() => localStorage.getItem('gulf_net_admin-token'));
     const response = await this.page.request.get(`${this.apiBaseUrl}/dashboard`, {
       headers: {
@@ -147,25 +199,13 @@ export class DashboardPage {
     }
 
     const body = await response.json();
-    const dashboard = (body as { data?: { dashboard?: Record<string, unknown> } })?.data?.dashboard;
+    const counts = this.parseDashboardCounts(body);
 
-    if (!dashboard || typeof dashboard !== 'object') {
+    if (!counts) {
       throw new Error('API GET /dashboard returned an unexpected payload');
     }
 
-    const readCount = (key: string): number => {
-      const value = dashboard[key];
-      return typeof value === 'number' ? value : Number(value ?? 0);
-    };
-
-    this.dashboardCountsCache = {
-      mobileUsers: readCount('totalMobileUsers'),
-      groups: readCount('totalGroups'),
-      admins: readCount('totalAdminUsers'),
-      hqMembers: readCount('totalHQMobileUsers'),
-      usersCanDelete: readCount('totalDeleteMobileUsers'),
-    };
-
+    this.dashboardCountsCache = counts;
     return this.dashboardCountsCache;
   }
 

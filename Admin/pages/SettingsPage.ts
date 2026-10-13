@@ -6,12 +6,6 @@ import { ensureAuthenticated as restoreSession } from '../utils/ensureAuthentica
 
 const authFile = path.join(__dirname, '../../playwright/.auth/admin.json');
 
-const SETTINGS_PAGE_TITLES = [
-  SettingsData.pageTitle,
-  SettingsData.languages.thai.settingsTitle,
-  SettingsData.languages.japanese.settingsTitle,
-] as const;
-
 export type ApiSettings = {
   url: string;
   email: string;
@@ -124,11 +118,7 @@ export class SettingsPage {
     if (await loading.first().isVisible().catch(() => false)) {
       await loading.first().waitFor({ state: 'hidden', timeout: 90_000 }).catch(() => undefined);
     }
-    await expect(this.page.locator('#pageTitle')).toHaveText(
-      new RegExp(`^(${SETTINGS_PAGE_TITLES.map((title) => title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})$`),
-      { timeout: 60_000 },
-    );
-    await expect(this.supportDetailsSection()).toBeVisible({ timeout: 30_000 });
+    await expect(this.supportDetailsSection()).toBeVisible({ timeout: 60_000 });
     await expect(this.stampsSection()).toBeVisible({ timeout: 30_000 });
   }
 

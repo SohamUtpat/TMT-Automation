@@ -23,6 +23,14 @@ async function loginAsTestUser(page: Page, credentials: TestAdminCredentials) {
   await expect(page.locator('#username')).toBeVisible({ timeout: 30_000 });
   await login.login(credentials.userName, credentials.password);
 
+  if (await page.locator('#username').isVisible().catch(() => false)) {
+    const loginError = login.lastErrorMessage || '(no toast captured)';
+    throw new Error(
+      `Dedicated admin login failed for ${credentials.userName}. ` +
+        `outcome=${login.lastLoginOutcome} status=${login.lastLoginStatus ?? 'n/a'} message=${loginError}`,
+    );
+  }
+
   await page.goto('/dashboard', { waitUntil: 'commit', timeout: 120_000 }).catch(() => undefined);
   await expect(page.locator('#pageTitle')).toBeVisible({ timeout: 60_000 });
 }
@@ -47,12 +55,6 @@ export const test = base.extend<ChangePasswordFixtures, WorkerFixtures>({
       const setupPage = new ChangePasswordPage(adminPage);
       await adminPage.goto('/dashboard', { waitUntil: 'commit', timeout: 120_000 });
       const credentials = await setupPage.createDedicatedTestAdminUser();
-
-      // Confirm the dedicated user can log in before any spec runs.
-      const verifyContext = await browser.newContext({ storageState: emptyStorageState });
-      const verifyPage = await verifyContext.newPage();
-      await loginAsTestUser(verifyPage, credentials);
-      await verifyContext.close();
 
       await adminContext.close();
       await use({ ...credentials });

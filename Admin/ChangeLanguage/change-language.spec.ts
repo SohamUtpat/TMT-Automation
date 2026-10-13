@@ -1,14 +1,6 @@
 import { test, expect } from '../fixtures/change-language.fixture';
 import { ChangeLanguageData } from '../data/ChangeLanguageData';
 
-// TC_AP_64 - Verify Change Language Accessible From Every Page
-// Commented out for now — enable when multi-page access checks are needed again.
-// test('TC_AP_64 - Verify Change Language Accessible From Every Page', async ({ changeLanguagePage }) => {
-//   for (const pageInfo of ChangeLanguageData.pages) {
-//     await changeLanguagePage.expectAccessibleFromPage(pageInfo.path, pageInfo.title);
-//   }
-// });
-
 test('TC_AP_65 - Verify Navigate To Change Language From Profile Menu', async ({ changeLanguagePage }) => {
   await changeLanguagePage.openFromProfileMenu();
   await changeLanguagePage.expectChangeLanguagePageLoaded();
@@ -27,7 +19,7 @@ test('TC_AP_67 - Verify Default Language Is Pre Selected', async ({ changeLangua
   });
 
   await test.step('Verify change language page title is displayed', async () => {
-    await expect(changeLanguagePage.page.locator('#pageTitle')).toHaveText(
+    await expect(changeLanguagePage.changeLanguagePageTitle()).toHaveText(
       ChangeLanguageData.buttons.changeLanguage,
     );
   });

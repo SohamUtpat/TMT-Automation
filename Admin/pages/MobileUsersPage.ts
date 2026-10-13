@@ -279,7 +279,7 @@ export class MobileUsersPage {
   }
 
   async expectBulkUploadHistoryLoaded() {
-    await expect(this.page.locator("#pageTitle")).toHaveText(
+    await expect(this.page.locator(".header-title")).toHaveText(
       MobileUsersData.bulkUpload.historyPageTitle,
       {
         timeout: 60_000,
@@ -411,12 +411,10 @@ export class MobileUsersPage {
   deleteIcon = (userName: string) =>
     this.userRow(userName).locator(".delete-icon");
 
-  sortHeader = (column: string) => {
-    const escaped = column.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    return this.table().getByRole("columnheader", {
-      name: new RegExp(`^${escaped}(?:\\s+caret-(?:up|down))*$`, "i"),
+  sortHeader = (column: string) =>
+    this.page.getByRole("columnheader").filter({
+      has: this.page.getByText(column, { exact: true }),
     });
-  };
 
   nextPageButton = () => this.pagination().locator(".ant-pagination-next");
 
@@ -1397,12 +1395,7 @@ export class MobileUsersPage {
   }
 
   async expectColumnHeaderVisible(header: string) {
-    const escaped = header.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    await expect(
-      this.table().getByRole("columnheader", {
-        name: new RegExp(`^${escaped}(?:\\s+caret-(?:up|down))*$`, "i"),
-      }),
-    ).toBeVisible();
+    await expect(this.sortHeader(header)).toBeVisible();
   }
 
   async expectHqGroupAssigned() {

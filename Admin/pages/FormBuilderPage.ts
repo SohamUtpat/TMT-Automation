@@ -347,10 +347,9 @@ export class FormBuilderPage {
     this.elementModal().locator(".ant-upload button").nth(index);
 
   modalImagePreviews = () =>
-    this.elementModal().getByRole("img", {
-      name: FormsData.builder.labels.imagePreviewAlt,
-      exact: true,
-    });
+    this.elementModal().locator(
+      'img[src^="blob:"], img[src^="http"], img[src^="https"]',
+    );
 
   sliderMinimumInput = () =>
     this.elementModal().getByRole("spinbutton", {
@@ -499,7 +498,10 @@ export class FormBuilderPage {
     }
     await this.optionLabelInputs().nth(index).fill(option.label);
     if (option.file) {
-      await this.imageUploadInputs().nth(index).setInputFiles(option.file);
+      const chooserPromise = this.page.waitForEvent("filechooser");
+      await this.imageUploadButton(index).click();
+      const chooser = await chooserPromise;
+      await chooser.setFiles(option.file);
     }
   }
 

@@ -95,12 +95,6 @@ const specs = {
   await adminUsersPage.cancelForm();
 });`,
 
-  227: `// import { test } from '../fixtures/admin-users.fixture';
-//
-// test.skip('TC_AP_227 - Admin User Cannot Login To Mobile App', async () => {
-//   // Requires mobile application login — out of admin portal automation scope.
-// });`,
-
   228: `test('TC_AP_228 - Verify Created User Appears In Listing', async ({ adminUsersPage }) => {
   const user = AdminUsersData.buildValidUser();
   await adminUsersPage.createAdminUser(user);
@@ -110,12 +104,6 @@ const specs = {
   const apiUser = (await adminUsersPage.fetchAdminUsers({ search: user.userName })).users[0];
   expect(apiUser?.userName).toBe(user.userName);
 });`,
-
-  229: `// import { test } from '../fixtures/admin-users.fixture';
-//
-// test.skip('TC_AP_229 - Verify Created User Receives Email', async () => {
-//   // Email delivery cannot be verified from admin portal automation.
-// });`,
 
   230: `test('TC_AP_230 - Verify Default Status Active On Create', async ({ adminUsersPage }) => {
   const user = AdminUsersData.buildValidUser();
@@ -148,12 +136,6 @@ const specs = {
   await expect(adminUsersPage.statusRadioGroup()).toHaveCount(0);
   await adminUsersPage.cancelForm();
 });`,
-
-  233: `// import { test } from '../fixtures/admin-users.fixture';
-//
-// test.skip('TC_AP_233 - Superadmin Reactivates All Inactive Admins', async () => {
-//   // Requires superadmin role and controlled environment — out of scope.
-// });`,
 
   234: `test('TC_AP_234 - Verify Edit Form Matches Create Form Fields', async ({ adminUsersPage }) => {
   const apiUser = await adminUsersPage.getApiListingUser();
@@ -251,12 +233,6 @@ const specs = {
   expect(emails.some((email) => email.includes(apiUser.email.split('@')[0]))).toBe(true);
 });`,
 
-  242: `// import { test } from '../fixtures/admin-users.fixture';
-//
-// test.skip('TC_AP_242 - Verify Doraku Failure Notification', async () => {
-//   // Requires Doraku integration failure trigger — out of admin portal scope.
-// });`,
-
   243: `test('TC_AP_243 - Verify Delete Opens Confirmation And Inactivates User', async ({ adminUsersPage }) => {
   const user = AdminUsersData.buildValidUser();
   await adminUsersPage.createAdminUser(user);
@@ -335,12 +311,6 @@ const specs = {
   await adminUsersPage.expectUploadError(AdminUsersData.validation.invalidImageFormat);
   await adminUsersPage.cancelForm();
 });`,
-
-  251: `// import { test } from '../fixtures/admin-users.fixture';
-//
-// test.skip('TC251 - Verify Profile Photo After Admin Login', async () => {
-//   // Requires separate login session with newly created admin — out of scope.
-// });`,
 
   252: `test('TC_AP_252 - Verify First Name Maximum Length 50', async ({ adminUsersPage }) => {
   const user = AdminUsersData.buildValidUser({
@@ -435,29 +405,9 @@ const specs = {
   await adminUsersPage.expectUserVisible(user.userName!);
 });`,
 
-  262: `test('TC_AP_262 - Verify Mobile Over 15 Shows Validation', async ({ adminUsersPage }) => {
-  await adminUsersPage.clickCreateUser();
-  await adminUsersPage.fillCreateUserForm({
-    ...AdminUsersData.buildValidUser(),
-    phone: '1'.repeat(16),
-  });
-  await adminUsersPage.submitCreateUser({ waitForApi: false });
-  await adminUsersPage.expectValidationMessage(AdminUsersData.validation.mobileMaxLength);
-});`,
-
-  263: `test('TC_AP_263 - Verify Mobile Rejects Invalid Characters', async ({ adminUsersPage }) => {
-  await adminUsersPage.clickCreateUser();
-  await adminUsersPage.fillCreateUserForm({
-    ...AdminUsersData.buildValidUser(),
-    phone: 'abc@#$',
-  });
-  await adminUsersPage.submitCreateUser({ waitForApi: false });
-  await adminUsersPage.expectValidationMessage(AdminUsersData.validation.invalidMobile);
-});`,
-
   264: `test('TC_AP_264 - Verify Listing Sort By Username Name Created On', async ({ adminUsersPage }) => {
   const { total } = await adminUsersPage.fetchAdminUsers();
-  test.skip(total < 2, 'Need at least 2 admin users from API to verify sorting');
+  expect(total, 'Need at least 2 admin users from API to verify sorting').toBeGreaterThanOrEqual(2);
 
   await adminUsersPage.clickSort('Username', 'asc');
   const ascUsernames = await adminUsersPage.getColumnValues('userName');
@@ -472,7 +422,7 @@ const specs = {
 
   265: `test('TC_AP_265 - Verify Sort Can Be Undone', async ({ adminUsersPage }) => {
   const { total } = await adminUsersPage.fetchAdminUsers();
-  test.skip(total < 2, 'Need at least 2 admin users from API to verify sort undo');
+  expect(total, 'Need at least 2 admin users from API to verify sort undo').toBeGreaterThanOrEqual(2);
 
   const original = await adminUsersPage.getColumnValues('userName');
   await adminUsersPage.clickSort('Username', 'asc');

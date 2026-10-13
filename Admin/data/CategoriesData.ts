@@ -1,36 +1,47 @@
 export const CategoriesData = {
   path: '/categories',
+  createPath: '/create-category',
   pageTitle: 'Categories',
   createPageTitle: 'Create Category',
   editPageTitle: 'Edit Category',
 
-  sortColumns: ['Name', 'Created On', 'Updated On'] as const,
+  listHeaders: [
+    'Category Name',
+    'Description',
+    'Assigned Group Count',
+    'Created On',
+    'Updated On',
+    'Actions',
+  ] as const,
 
   api: {
     defaultPage: 0,
-    defaultSize: 25,
+    defaultSize: 20,
     defaultSearch: '',
-    defaultSort: 'createdAt,desc',
+    defaultSort: 'categoryOrder,asc',
   },
 
   validation: {
-    nameRequired: /required|cannot be empty|enter category name|name is required/i,
+    nameRequired: /required|cannot be empty|enter category name|name is required|category name is required/i,
     nameDuplicate: /already exists|already exist|duplicate|unique|taken|same name|exists/i,
-    // App currently shows the required message for both empty and pattern-invalid names.
     nameSpecialChars: /required|special|invalid|not valid|alphanumeric|letters|name not valid/i,
     nameMaxLength: 50,
     nameTooLong: /maximum|max|too long|characters|length|required/i,
   },
 
   search: {
+    placeholder: 'Search categories...',
+    groupsPlaceholder: 'Search groups...',
     noMatchTerm: `NoCatMatch${Date.now()}`,
+    emptySearch: /no categories match your search/i,
   },
 
   deleteModal: {
     confirmMessage: /are you sure you want to delete this category/i,
-    blockedTitle: 'Delete Group',
-    blockedMessage: /category cannot be deleted while groups are assigned/i,
-    blockedHint: /remove all assigned groups first/i,
+    confirmButton: 'Delete',
+    blockedTitle: 'Cannot Delete Category',
+    blockedMessage: /this category still has groups assigned/i,
+    blockedHint: /unassign its groups|remove all assigned groups/i,
   },
 
   messages: {
@@ -43,11 +54,11 @@ export const CategoriesData = {
     nameLabel: 'Category Name',
     descriptionLabel: 'Description',
     groupsLabel: 'Assigned Groups',
-    groupsPlaceholder: 'Select groups',
-    createButton: 'Create',
+    assignGroupsButton: 'Assign Groups',
+    createButton: 'Create Category',
     cancelButton: 'Cancel',
-    updateButton: 'Update',
-    backLink: 'Back',
+    updateButton: 'Update Category',
+    backLink: 'Back to Categories',
   },
 
   uniqueCategory(prefix = 'Cat') {

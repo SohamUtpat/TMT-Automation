@@ -43,12 +43,6 @@ test('TC_AP_285 - Verify Venn Diagram Counts', async ({ dashboardPage }) => {
   // expect(vennText).toContain(String(apiUsersCanDelete));
 });
 
-// test('TC_AP_286 - Verify Mobile App Users Click Action', async ({ dashboardPage, page }) => {
-//   await dashboardPage.mobileAppUsersLink().click();
-//   await page.waitForURL(/\/mobile-users(?:\/|$|\?)/, { timeout: 30_000 });
-//   await expect(page.locator('#pageTitle')).toHaveText('Mobile Users', { timeout: 30_000 });
-// });
-
 test('TC_AP_287 - Verify Group Wise User Graph', async ({ dashboardPage }) => {
   await dashboardPage.scrollToGraph();
 

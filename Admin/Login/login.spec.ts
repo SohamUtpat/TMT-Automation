@@ -2,12 +2,12 @@ import { test, expect } from '../fixtures/login.fixture';
 import { loginData } from '../data/loginData';
 
 test('TC_AP_02 - Incorrect Username', async ({ loginPage }) => {
-  await loginPage.login('Soham06', loginData.validPassword);
+  await loginPage.login('ADMINX', loginData.validPassword);
   await loginPage.expectInvalidCredentials();
 });
 
 test('TC_AP_03 - Username Case Sensitivity', async ({ loginPage }) => {
-  await loginPage.login('SOHAM05', loginData.validPassword);
+  await loginPage.login('admin', loginData.validPassword);
   await loginPage.expectInvalidCredentials();
 });
 
@@ -35,12 +35,6 @@ test('TC_AP_08 - Invalid Username and Password', async ({ loginPage }) => {
   await loginPage.login(loginData.invalidUser, loginData.invalidPassword);
   await loginPage.expectInvalidCredentials();
 });
-
-// test('TC_AP_09 - Character Limit', async ({ loginPage }) => {
-//   await loginPage.username.fill('a'.repeat(200));
-//   const value = await loginPage.username.inputValue();
-//   expect(value.length).toBeLessThanOrEqual(200);
-// });
 
 test('TC_AP_10 - Verify Placeholders', async ({ loginPage }) => {
   await expect(loginPage.username).toHaveAttribute('placeholder', 'Enter Here');
