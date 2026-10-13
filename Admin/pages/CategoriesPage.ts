@@ -6,16 +6,16 @@ import type { ApiGroup } from './GroupsPage';
 
 /**
  * Category list is a custom infinite-scroll grid (not Ant Table).
- * Columns: drag | name | description | assigned count | created | updated | actions
+ * Columns: drag | name | assigned count | created | updated | actions
+ * (Description was removed from the Categories UI.)
  */
 export const CATEGORY_TABLE_COL = {
   drag: 0,
   name: 1,
-  description: 2,
-  assignedGroups: 3,
-  createdOn: 4,
-  updatedOn: 5,
-  actions: 6,
+  assignedGroups: 2,
+  createdOn: 3,
+  updatedOn: 4,
+  actions: 5,
 } as const;
 
 export type CategoryTableColumn = keyof typeof CATEGORY_TABLE_COL;
@@ -23,7 +23,8 @@ export type CategoryTableColumn = keyof typeof CATEGORY_TABLE_COL;
 export type ApiCategory = {
   id: string;
   name: string;
-  description: string;
+  /** API may still return this; it is no longer shown or edited in the UI. */
+  description?: string;
   assignedGroupCount: number;
   createdAt: string;
   updatedAt: string;
@@ -231,8 +232,8 @@ export class CategoriesPage {
   /** Category Order was removed from the create/edit UI. */
   orderInput = () => this.page.locator('.category-order-input input');
 
-  descriptionInput = () =>
-    this.page.locator('textarea.category-textarea, textarea.ant-input').first();
+  /** Description was removed from the create/edit UI. */
+  descriptionInput = () => this.page.locator('textarea.category-textarea');
 
   assignGroupsButton = () =>
     this.page
@@ -289,10 +290,6 @@ export class CategoriesPage {
       switch (column) {
         case 'name':
           text = (await row.locator('.category-name').innerText().catch(() => ''))?.trim() || '';
-          break;
-        case 'description':
-          text =
-            (await row.locator('.category-description').innerText().catch(() => ''))?.trim() || '';
           break;
         case 'assignedGroups':
           text = (await row.locator('.category-cell-groups').innerText().catch(() => ''))?.trim() || '';
@@ -445,7 +442,7 @@ export class CategoriesPage {
     await expect(this.page).toHaveURL(/\/create-category/, { timeout: 30_000 });
     await expect(this.pageHeading()).toHaveText(CategoriesData.createPageTitle, { timeout: 30_000 });
     await expect(this.nameInput()).toBeVisible({ timeout: 15_000 });
-    await expect(this.descriptionInput()).toBeVisible({ timeout: 15_000 });
+    await expect(this.descriptionInput()).toHaveCount(0);
     await expect(this.assignGroupsButton()).toBeVisible({ timeout: 15_000 });
   }
 
@@ -454,14 +451,10 @@ export class CategoriesPage {
     await this.expectCategoriesLoaded();
   }
 
-  async fillCategoryForm(name: string, description = '', _order?: number) {
+  async fillCategoryForm(name: string, _description?: string, _order?: number) {
     const nameField = this.nameInput();
     await expect(nameField).toBeVisible({ timeout: 15_000 });
     await nameField.fill(name);
-
-    const descriptionField = this.descriptionInput();
-    await expect(descriptionField).toBeVisible({ timeout: 15_000 });
-    await descriptionField.fill(description);
   }
 
   async openGroupsDropdownAndSearch(query: string) {
@@ -643,7 +636,7 @@ export class CategoriesPage {
     groups?: ApiGroup[];
   }) {
     await this.openCreateCategory();
-    await this.fillCategoryForm(options.name, options.description ?? '', options.categoryOrder);
+    await this.fillCategoryForm(options.name);
     if (options.groups?.length) {
       for (const group of options.groups) {
         await this.assignGroupFromDropdown(group);
@@ -664,7 +657,7 @@ export class CategoriesPage {
     await expect(this.pageHeading()).toHaveText(CategoriesData.editPageTitle, { timeout: 30_000 });
     await expect(this.updateButton()).toBeVisible({ timeout: 30_000 });
     await expect(this.nameInput()).toBeVisible({ timeout: 15_000 });
-    await expect(this.descriptionInput()).toBeVisible({ timeout: 15_000 });
+    await expect(this.descriptionInput()).toHaveCount(0);
     await expect(this.assignGroupsButton()).toBeVisible({ timeout: 15_000 });
   }
 
@@ -741,7 +734,6 @@ export class CategoriesPage {
       }
       await this.createCategory({
         name: seed.name,
-        description: seed.description,
         groups: [group],
       });
       const created = await this.getApiCategoryByName(seed.name);
@@ -749,7 +741,6 @@ export class CategoriesPage {
         return {
           id: '',
           name: seed.name,
-          description: seed.description,
           assignedGroupCount: await this.getAssignedGroupCount(seed.name),
           createdAt: '',
           updatedAt: '',

@@ -5,7 +5,7 @@ import {
 } from '../data/FormsData';
 import type { FormBuilderPage } from '../pages/FormBuilderPage';
 
-type BasicElementType = 'singleLine' | 'numeric' | 'multiLine';
+type BasicElementType = 'singleLine' | 'numeric' | 'decimal' | 'multiLine';
 
 const validOption = { label: 'First option', value: 'first-option' };
 
@@ -514,6 +514,45 @@ test('TC_AP_395 - Verify maximum character limit for Field Label', async ({
 test('TC_AP_397 - Verify modal layout/UI elements', async ({ formBuilderPage }) => {
   await expectBasicModal(formBuilderPage, 'numeric');
   await expect(formBuilderPage.elementModalTitle()).toContainText('Numeric text');
+});
+
+test('TC_AP_397B - Verify Decimal number modal opens on clicking the “+” icon', async ({
+  formBuilderPage,
+}) => {
+  await expectBasicModal(formBuilderPage, 'decimal');
+});
+
+test('TC_AP_397C - Verify Decimal Field Label is mandatory', async ({ formBuilderPage }) => {
+  await expectMandatoryLabel(formBuilderPage, 'decimal');
+});
+
+test('TC_AP_397D - Verify Decimal valid Field Label is accepted', async ({ formBuilderPage }) => {
+  await expectValidFieldAccepted(formBuilderPage, 'decimal', 'Decimal-valid');
+});
+
+test('TC_AP_397E - Verify Decimal Description placeholder field accepts optional text', async ({
+  formBuilderPage,
+}) => {
+  await expectDescriptionAccepted(formBuilderPage, 'decimal', 'Decimal-description');
+});
+
+test('TC_AP_397F - Verify Decimal Required checkbox functionality', async ({ formBuilderPage }) => {
+  await expectRequiredState(formBuilderPage, 'decimal', true, 'Decimal-required');
+});
+
+test('TC_AP_397G - Verify Decimal preview uses a number input that accepts decimals', async ({
+  formBuilderPage,
+}) => {
+  const label = uniqueLabel('Decimal-preview');
+  await formBuilderPage.addElement('decimal', { label });
+  const control = formBuilderPage.previewFieldControl(label);
+  await expect(control).toHaveAttribute('type', 'number');
+  await expect(control).toHaveAttribute('step', 'any');
+});
+
+test('TC_AP_397H - Verify Decimal modal layout/UI elements', async ({ formBuilderPage }) => {
+  await expectBasicModal(formBuilderPage, 'decimal');
+  await expect(formBuilderPage.elementModalTitle()).toContainText('Decimal number');
 });
 
 test('TC_AP_398 - Verify Multi Line Text modal opens on clicking the “+” icon', async ({

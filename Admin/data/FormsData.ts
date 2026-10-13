@@ -7,6 +7,7 @@ export const FormsData = {
   tableColumns: [
     "Form Name",
     "Description",
+    "Assigned Groups",
     "Created On",
     "Updated On",
     "Actions",
@@ -97,6 +98,11 @@ export const FormsData = {
         hasOptions: false,
       },
       numeric: { label: "Numeric text", apiType: "NUMBER", hasOptions: false },
+      decimal: {
+        label: "Decimal number",
+        apiType: "DECIMAL",
+        hasOptions: false,
+      },
       multiLine: {
         label: "Multi-line text",
         apiType: "TEXT_MULTI_LINE",

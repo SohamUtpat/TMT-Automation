@@ -464,7 +464,7 @@ export class MobileUsersPage {
   fieldError = (text: string | RegExp) =>
     this.page
       .locator(
-        '[class*="textInput-module__info"], [class*="info"].error, .mobile-text-labels .error',
+        '[class*="textInput-module__info"], [class*="info"].error, .mobile-text-labels .error, .phone-input-error-text',
       )
       .filter({
         hasText: text,

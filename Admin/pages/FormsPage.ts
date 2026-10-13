@@ -8,9 +8,10 @@ import type { ApiGroup } from "./GroupsPage";
 export const FORM_TABLE_COL = {
   name: 0,
   description: 1,
-  createdOn: 2,
-  updatedOn: 3,
-  actions: 4,
+  assignedGroups: 2,
+  createdOn: 3,
+  updatedOn: 4,
+  actions: 5,
 } as const;
 
 export type FormTableColumn = keyof typeof FORM_TABLE_COL;
@@ -131,7 +132,7 @@ export class FormsPage {
   // ── Top navigation buttons ───────────────────────────────────────────────────
 
   formBuilderButton = () =>
-    this.page.getByRole("button", { name: /form builder/i });
+    this.page.getByRole("button", { name: /create form/i });
 
   formSubmissionsButton = () =>
     this.page.getByRole("button", { name: /form submissions/i });

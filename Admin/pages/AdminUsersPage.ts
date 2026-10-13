@@ -367,7 +367,7 @@ export class AdminUsersPage {
   fieldError = (text: string | RegExp) =>
     this.page
       .locator(
-        '[class*="textInput-module__info"], [class*="info"].error, .admin-text-labels .error',
+        '[class*="textInput-module__info"], [class*="info"].error, .admin-text-labels .error, .phone-input-error-text',
       )
       .filter({
         hasText: text,

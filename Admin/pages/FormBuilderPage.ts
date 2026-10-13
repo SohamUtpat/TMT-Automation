@@ -81,11 +81,11 @@ export class FormBuilderPage {
 
   async openFromFormsList() {
     await expect(
-      this.page.getByRole("button", { name: /form builder/i }),
+      this.page.getByRole("button", { name: /create form/i }),
     ).toBeVisible({
       timeout: 30_000,
     });
-    await this.page.getByRole("button", { name: /form builder/i }).click();
+    await this.page.getByRole("button", { name: /create form/i }).click();
     await this.expectBuilderLoaded();
   }
 

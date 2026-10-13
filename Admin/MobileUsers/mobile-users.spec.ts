@@ -382,12 +382,14 @@ test("TC_AP_179 - Verify Username Under 3 Shows Validation", async ({
   });
 });
 
-test("TC_AP_180 - Verify Maximum Mobile Length 15", async ({
+test("TC_AP_180 - Verify Valid JP/SG/TH Mobile Number Is Accepted", async ({
   mobileUsersPage,
 }) => {
-  const user = MobileUsersData.buildValidUser({ phone: "123456789012345" });
+  const user = MobileUsersData.buildValidUser({
+    phone: MobileUsersData.validation.validMobileExample,
+  });
 
-  await test.step("Create user with 15-digit mobile number", async () => {
+  await test.step("Create user with a valid Japan mobile number", async () => {
     await mobileUsersPage.clickCreateUser();
     await mobileUsersPage.fillCreateUserForm(user);
     await mobileUsersPage.triggerFieldValidation();
@@ -400,18 +402,18 @@ test("TC_AP_180 - Verify Maximum Mobile Length 15", async ({
   });
 });
 
-test("TC_AP_181 - Verify Mobile Over 15 Shows Validation", async ({
+test("TC_AP_181 - Verify Invalid Country Mobile Shows Validation", async ({
   mobileUsersPage,
 }) => {
-  await test.step("Submit create form with 16-digit mobile number", async () => {
+  await test.step("Submit create form with a non JP/SG/TH mobile number", async () => {
     await mobileUsersPage.clickCreateUser();
-    await mobileUsersPage.fillCreateUserForm({ phone: "1234567890123456" });
+    await mobileUsersPage.fillCreateUserForm({ phone: "123456789012345" });
     await mobileUsersPage.submitCreateUser({ waitForApi: false });
   });
 
-  await test.step("Verify mobile max length validation message", async () => {
+  await test.step("Verify country mobile validation message", async () => {
     await mobileUsersPage.expectValidationMessage(
-      MobileUsersData.validation.mobileMaxLength,
+      MobileUsersData.validation.invalidMobile,
     );
   });
 });

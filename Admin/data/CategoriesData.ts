@@ -7,7 +7,6 @@ export const CategoriesData = {
 
   listHeaders: [
     'Category Name',
-    'Description',
     'Assigned Group Count',
     'Created On',
     'Updated On',
@@ -52,7 +51,6 @@ export const CategoriesData = {
 
   form: {
     nameLabel: 'Category Name',
-    descriptionLabel: 'Description',
     groupsLabel: 'Assigned Groups',
     assignGroupsButton: 'Assign Groups',
     createButton: 'Create Category',
@@ -65,14 +63,12 @@ export const CategoriesData = {
     const stamp = Date.now().toString().slice(-6);
     return {
       name: `${prefix}${stamp}`,
-      description: `Auto category ${stamp}`,
     };
   },
 
   example: {
     sports: {
       name: 'Sports',
-      description: 'Sports related groups',
       groups: ['Cricket', 'Football'],
     },
   },

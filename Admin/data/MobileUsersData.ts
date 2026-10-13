@@ -60,8 +60,11 @@ export const MobileUsersData = {
     usernamePattern: 'Only alphabets, numbers, dashes and underscores are allowed',
     invalidEmail: 'Enter a valid email',
     emailMaxLength: 'The length of email must be maximum 350',
-    mobileMaxLength: 'The length of mobile number must be maximum 15',
-    invalidMobile: 'Enter a valid mobile number',
+    mobileMaxLength:
+      'Enter a valid Japan, Singapore or Thailand mobile number (e.g. +81 90 1234 5678)',
+    invalidMobile:
+      'Enter a valid Japan, Singapore or Thailand mobile number (e.g. +81 90 1234 5678)',
+    validMobileExample: '09012345678',
     dorakuMaxLength: 'The length of Doraku code must be maximum 20',
     invalidDoraku: 'Invalid doraku code',
     passwordLength: '8-15 characters',
@@ -126,7 +129,8 @@ export const MobileUsersData = {
       'The username can have a maximum of 50 characters and a minimum of 3 characters.',
       'Maximum character limit for first name and last name is 50 characters.',
       'Enter a valid email address.',
-      'Enter a valid mobile number.',
+      'Phone number must be a Japan, Singapore or Thailand mobile number (e.g. +81 90 1234 5678).',
+      'Spaces, hyphens, and parentheses are allowed; country code is optional (e.g. 09012345678, +6591234567, 0812345678).',
       'Values in the language field should be either eng or thai or jpn.',
       'Groups can accept multiple groups separated by a comma',
       'Roles accept comma separated values',
@@ -137,7 +141,14 @@ export const MobileUsersData = {
     /** Field guidance from TC_AP_273 manual steps. */
     fieldRules: [
       { label: 'valid email', pattern: /valid email/i },
-      { label: 'valid mobile number', pattern: /valid mobile number/i },
+      {
+        label: 'valid JP/SG/TH mobile number',
+        pattern: /Japan, Singapore or Thailand mobile number/i,
+      },
+      {
+        label: 'mobile formatting allowed',
+        pattern: /Spaces, hyphens, and parentheses are allowed/i,
+      },
       { label: 'language eng thai jpn', pattern: /eng or thai or jpn/i },
       { label: 'mobile optional', pattern: /Mobile, Doraku code.*optional/i },
       { label: 'groups comma separated', pattern: /Groups can accept multiple groups/i },

@@ -512,10 +512,12 @@ test("TC_AP_260 - Verify Username Under 3 Shows Validation", async ({
   );
 });
 
-test("TC_AP_261 - Verify Mobile Maximum Length 15", async ({
+test("TC_AP_261 - Verify Valid JP/SG/TH Mobile Number Is Accepted", async ({
   adminUsersPage,
 }) => {
-  const user = AdminUsersData.buildValidUser({ phone: "1".repeat(15) });
+  const user = AdminUsersData.buildValidUser({
+    phone: AdminUsersData.validation.validMobileExample,
+  });
   await adminUsersPage.createAdminUser(user);
   await adminUsersPage.searchUsers(user.userName!);
   await adminUsersPage.expectUserVisible(user.userName!);

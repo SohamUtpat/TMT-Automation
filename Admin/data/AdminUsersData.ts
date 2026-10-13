@@ -51,7 +51,9 @@ export const AdminUsersData = {
     invalidEmail: 'Enter a valid email',
     emailMaxLength: 'The length of email must be maximum 350',
     mobileMaxLength: 'The length of mobile number must be maximum 15',
-    invalidMobile: 'Enter a valid mobile number',
+    invalidMobile:
+      'Enter a valid Japan, Singapore or Thailand mobile number (e.g. +81 90 1234 5678)',
+    validMobileExample: '09012345678',
     invalidImageFormat: /Only JPG, PNG, and JPEG files are allowed/i,
     imageTooSmall: /File size is less than \d+ KB/i,
     imageTooLarge: /File size exceeds the limit of \d+ MB/i,
