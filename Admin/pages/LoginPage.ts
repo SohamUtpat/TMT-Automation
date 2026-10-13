@@ -1,5 +1,6 @@
 import { expect, type Locator, type Page, type Response } from '@playwright/test';
 import { loginData } from '../data/loginData';
+import { adminPageTitle } from '../utils/adminPageTitle';
 
 type LoginOutcome = 'logged-in' | 'dashboard' | 'error' | 'pending';
 
@@ -50,7 +51,7 @@ export class LoginPage {
   private async isLoggedInView(): Promise<boolean> {
     return (
       (await this.loggedInShell.isVisible().catch(() => false)) ||
-      (await this.page.locator('#pageTitle').isVisible().catch(() => false))
+      (await adminPageTitle(this.page).isVisible().catch(() => false))
     );
   }
 
@@ -371,8 +372,7 @@ export class LoginPage {
       .waitFor({ state: 'visible', timeout: 30_000 })
       .then(() => 'logged-in' as const);
 
-    const titleVisible = this.page
-      .locator('#pageTitle')
+    const titleVisible = adminPageTitle(this.page)
       .waitFor({ state: 'visible', timeout: 30_000 })
       .then(() => 'logged-in' as const);
 

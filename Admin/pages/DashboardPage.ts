@@ -1,6 +1,14 @@
 import { getApiBaseUrl } from '../config/appConfig';
 import { expect, type Locator, type Page } from '@playwright/test';
+import { adminPageTitle } from '../utils/adminPageTitle';
 import { ensureAuthenticated as restoreSession } from '../utils/ensureAuthenticated';
+
+type DashboardGroup = {
+  name: string;
+  hqMembers: number;
+  usersCanDelete: number;
+  regularUsers: number;
+};
 
 type DashboardCounts = {
   mobileUsers: number;
@@ -8,6 +16,8 @@ type DashboardCounts = {
   admins: number;
   hqMembers: number;
   usersCanDelete: number;
+  regularUsers: number;
+  groupDetails: DashboardGroup[];
 };
 
 export class DashboardPage {
@@ -44,6 +54,8 @@ export class DashboardPage {
 
   xAxisLabels = () =>
     this.page.locator('.recharts-xAxis .recharts-cartesian-axis-tick-value');
+
+  mobileUsersPaginationInfo = () => this.page.locator('.ant-pagination-total-text');
 
   private waitForDashboardResponse() {
     return this.page
@@ -88,12 +100,35 @@ export class DashboardPage {
       return typeof value === 'number' ? value : Number(value ?? 0);
     };
 
+    const rawGroups = Array.isArray(dashboard.groups) ? dashboard.groups : [];
+    const groupDetails: DashboardGroup[] = rawGroups
+      .map((group) => {
+        const record = group as Record<string, unknown>;
+        const name = String(record.groupName ?? '').trim();
+        if (!name) return null;
+
+        const readGroupCount = (key: string): number => {
+          const value = record[key];
+          return typeof value === 'number' ? value : Number(value ?? 0);
+        };
+
+        return {
+          name,
+          hqMembers: readGroupCount('totalHQMobileUsers'),
+          usersCanDelete: readGroupCount('totalDeleteMobileUsers'),
+          regularUsers: readGroupCount('totalBasicMobileUsers'),
+        };
+      })
+      .filter((group): group is DashboardGroup => group !== null);
+
     return {
       mobileUsers: readCount('totalMobileUsers'),
       groups: readCount('totalGroups'),
       admins: readCount('totalAdminUsers'),
       hqMembers: readCount('totalHQMobileUsers'),
       usersCanDelete: readCount('totalDeleteMobileUsers'),
+      regularUsers: readCount('totalBasicMobileUsers'),
+      groupDetails,
     };
   }
 
@@ -107,6 +142,7 @@ export class DashboardPage {
       }
     }
 
+    this.dashboardCountsCache = null;
     const dashboardApi = this.waitForDashboardResponse();
     await this.page.goto('/dashboard', { waitUntil: 'commit', timeout: 120_000 });
     await this.ensureAuthenticated();
@@ -143,14 +179,24 @@ export class DashboardPage {
 
     if (loadingVisible) {
       await loading.waitFor({ state: 'hidden', timeout: 90_000 }).catch(async () => {
+        this.dashboardCountsCache = null;
         const dashboardApi = this.waitForDashboardResponse();
         await this.page.reload({ waitUntil: 'commit', timeout: 120_000 });
         await dashboardApi;
       });
     }
 
-    await expect(this.page.locator('#pageTitle')).toHaveText('Dashboard', { timeout: 15_000 });
+    await expect(adminPageTitle(this.page)).toHaveText('Dashboard', { timeout: 15_000 });
     await expect(this.totalMobileAppUsers()).toBeVisible({ timeout: 45_000 });
+  }
+
+  /** Reload dashboard and refresh the API counts cache (TC_AP_282). */
+  async refreshDashboard() {
+    this.dashboardCountsCache = null;
+    const dashboardApi = this.waitForDashboardResponse();
+    await this.page.reload({ waitUntil: 'commit', timeout: 120_000 });
+    await dashboardApi;
+    await this.expectDashboardLoaded();
   }
 
   async scrollToGraph() {
@@ -229,6 +275,42 @@ export class DashboardPage {
     return (await this.fetchDashboardCounts()).usersCanDelete;
   }
 
+  async getApiRegularUsersCount(): Promise<number> {
+    return (await this.fetchDashboardCounts()).regularUsers;
+  }
+
+  /** Group names that have zero users of every category (should not appear on the graph). */
+  async getApiEmptyGroupNames(): Promise<string[]> {
+    const details = (await this.fetchDashboardCounts()).groupDetails;
+    return details
+      .filter(
+        (group) => group.hqMembers + group.usersCanDelete + group.regularUsers === 0,
+      )
+      .map((group) => group.name);
+  }
+
+  /** True when `text` contains the count in plain or locale-formatted form (e.g. 1234 / 1,234). */
+  countAppearsInText(text: string, count: number): boolean {
+    return text.includes(String(count)) || text.includes(count.toLocaleString());
+  }
+
+  async openMobileUsersFromVenn() {
+    await expect(this.mobileAppUsersLink()).toBeVisible({ timeout: 15_000 });
+    await this.mobileAppUsersLink().click();
+    await expect(this.page).toHaveURL(/\/mobile-users(?:\/|$|\?)/, { timeout: 60_000 });
+    await expect(adminPageTitle(this.page)).toHaveText(/Mobile Users/i, {
+      timeout: 60_000,
+    });
+  }
+
+  async getMobileUsersListingTotal(): Promise<number> {
+    const info = this.mobileUsersPaginationInfo();
+    await expect(info).toBeVisible({ timeout: 30_000 });
+    const text = (await info.textContent()) ?? '';
+    const match = text.match(/of\s+([\d,]+)\s+items/i);
+    return match ? Number(match[1].replace(/,/g, '')) : 0;
+  }
+
   async hoverOnGroup(index: number) {
     await this.scrollToGraph();
     const bars = this.graphBars();
@@ -258,5 +340,18 @@ export class DashboardPage {
   async getTooltipText(): Promise<string> {
     await expect(this.graphTooltip()).toBeVisible({ timeout: 10_000 });
     return (await this.graphTooltip().innerText()) ?? '';
+  }
+
+  /** Parse numeric values shown next to tooltip category labels. */
+  parseTooltipCounts(tooltip: string): Record<string, number> {
+    const result: Record<string, number> = {};
+    const pattern =
+      /(HQ Members|Users Can Delete|Regular Users)\s*:\s*([\d,]+)/gi;
+
+    for (const match of tooltip.matchAll(pattern)) {
+      result[match[1]] = Number(match[2].replace(/,/g, ''));
+    }
+
+    return result;
   }
 }

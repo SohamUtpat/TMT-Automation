@@ -1,4 +1,5 @@
 import { expect, type Page } from '@playwright/test';
+import { adminPageTitle } from './adminPageTitle';
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -32,5 +33,5 @@ export async function expectAdminPageReady(page: Page, path: string, title: stri
     return;
   }
 
-  await expect(page.locator('#pageTitle')).toHaveText(title, { timeout: 60_000 });
+  await expect(adminPageTitle(page)).toHaveText(title, { timeout: 60_000 });
 }

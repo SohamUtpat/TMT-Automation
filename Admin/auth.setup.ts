@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { LoginPage } from './pages/LoginPage';
 import { loginData } from './data/loginData';
+import { adminPageTitle } from './utils/adminPageTitle';
 
 const authFile = path.join(__dirname, '../playwright/.auth/admin.json');
 
@@ -32,7 +33,7 @@ setup('authenticate admin', async ({ browser }) => {
       throw error;
     }
 
-    await expect(page.locator('#pageTitle')).toBeVisible({ timeout: 300_000 });
+    await expect(adminPageTitle(page)).toBeVisible({ timeout: 300_000 });
     await context.storageState({ path: authFile });
   } finally {
     await context.close();
