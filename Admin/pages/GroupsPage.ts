@@ -1,5 +1,7 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import { getApiBaseUrl } from '../config/appConfig';
+import { GroupsData } from '../data/GroupsData';
+import { adminPageTitle } from '../utils/adminPageTitle';
 import { ensureAuthenticated as restoreSession } from '../utils/ensureAuthenticated';
 
 /** Groups table column indices — first column is the group icon. */
@@ -90,17 +92,17 @@ export class GroupsPage {
     await this.expectGroupsLoaded();
   }
 
+  /** Groups list heading — new UI uses `.listing-page-heading h1`, legacy keeps `#pageTitle`. */
+  pageHeading = () => adminPageTitle(this.page);
+
   async expectGroupsTitle() {
-    await expect
-      .poll(async () => (await this.page.locator('#pageTitle').textContent())?.trim() ?? '', {
-        timeout: 60_000,
-      })
-      .toBe('Groups');
+    await expect(this.pageHeading()).toHaveText(GroupsData.pageTitle, { timeout: 60_000 });
   }
 
   private async describeGroupsLoadFailure(): Promise<string> {
     const url = this.page.url();
-    const title = (await this.page.locator('#pageTitle').textContent().catch(() => null))?.trim() ?? '(no #pageTitle)';
+    const title =
+      (await this.pageHeading().textContent().catch(() => null))?.trim() ?? '(no page heading)';
     const onLogin = await this.page.locator('#username').isVisible().catch(() => false);
     const loading = await this.page.getByText('Loading...', { exact: true }).isVisible().catch(() => false);
     return `Groups page did not become ready. url=${url} title="${title}" onLogin=${onLogin} loading=${loading}`;
@@ -159,9 +161,8 @@ export class GroupsPage {
 
     await groupApi;
     await this.page.waitForURL(/\/groups(?:\/|$|\?)/, { timeout: 60_000 }).catch(() => undefined);
-    await this.page
-      .locator('#pageTitle')
-      .filter({ hasText: 'Groups' })
+    await this.pageHeading()
+      .filter({ hasText: GroupsData.pageTitle })
       .waitFor({ state: 'visible', timeout: 60_000 })
       .catch(() => undefined);
   }
@@ -782,6 +783,15 @@ export class GroupsPage {
     return this.extractGroups(body);
   }
 
+  /** Any existing group from the API (used for uniqueness / duplicate checks). */
+  async getApiAnyGroup(): Promise<ApiGroup> {
+    const groups = await this.fetchGroups();
+    if (!groups.length) {
+      throw new Error('No groups found from API');
+    }
+    return groups[0];
+  }
+
   /** Returns a group with userCount > 0 from the groups API. */
   async getApiGroupWithMembers(
     options: { excludeHq?: boolean; minUserCount?: number } = {},
@@ -826,6 +836,22 @@ export class GroupsPage {
     }
 
     return group;
+  }
+
+  /**
+   * First deletable group from the API with zero members (HQ excluded).
+   * Returns null when none exist so callers can fall back to creating one.
+   */
+  async getApiFirstGroupWithZeroMembers(): Promise<ApiGroup | null> {
+    const groups = await this.fetchGroups();
+    return (
+      groups.find(
+        (entry) =>
+          entry.userCount === 0 &&
+          entry.code !== 'HQ' &&
+          entry.name !== 'HQ Group',
+      ) ?? null
+    );
   }
 
   async getApiHqGroup(): Promise<ApiGroup> {

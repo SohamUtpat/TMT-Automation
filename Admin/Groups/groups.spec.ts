@@ -1,6 +1,7 @@
 import path from 'path';
 import { test, expect } from '../fixtures/groups.fixture';
 import { GroupsData } from '../data/GroupsData';
+import { GROUP_TABLE_COL } from '../pages/GroupsPage';
 
 test('TC_AP_122 - Verify Pagination Navigation Between Pages', async ({ groupsPage }) => {
   await expect(groupsPage.pagination()).toBeVisible();
@@ -75,10 +76,9 @@ test('TC_AP_125 - Verify Sorting on Name Code and Created Date', async ({ groups
 });
 
 test('TC_AP_126 - Verify Group Delete Blocked When Users Exist', async ({ groupsPage }) => {
-  await groupsPage.expectGroupsTitle();
-
+  // Any API group with members; search so the row is visible regardless of prior sort/page.
   const group = await groupsPage.getApiFirstGroupWithMembers();
-  await expect(groupsPage.groupRow(group.name)).toBeVisible({ timeout: 30_000 });
+  await groupsPage.prepareGroupFromApi(group);
 
   await groupsPage.clickDeleteGroup(group.name);
 
@@ -93,20 +93,28 @@ test('TC_AP_126 - Verify Group Delete Blocked When Users Exist', async ({ groups
 });
 
 test('TC_AP_127 - Verify Group Deleted When Total Members Is Zero', async ({ groupsPage }) => {
-  const group = GroupsData.uniqueGroup('Del');
+  // Prefer an existing empty API group; create one only when none exist.
+  const existing = await groupsPage.getApiFirstGroupWithZeroMembers();
+  let groupName: string;
 
-  await groupsPage.createGroup(group.name, group.code);
-  await groupsPage.expectGroupVisible(group.name);
+  if (existing) {
+    await groupsPage.prepareGroupFromApi(existing);
+    groupName = existing.name;
+  } else {
+    const created = GroupsData.uniqueGroup('Del');
+    await groupsPage.createGroup(created.name, created.code);
+    await groupsPage.expectGroupVisible(created.name);
+    groupName = created.name;
+  }
 
-  const memberCount = await groupsPage.getMemberCount(group.name);
-  expect(memberCount).toBe(0);
+  expect(await groupsPage.getMemberCount(groupName)).toBe(0);
 
-  await groupsPage.clickDeleteGroup(group.name);
+  await groupsPage.clickDeleteGroup(groupName);
   await expect(groupsPage.deleteConfirmModal()).toBeVisible();
   await expect(groupsPage.page.getByText(GroupsData.deleteModal.confirmTitle)).toBeVisible();
 
   await groupsPage.confirmDelete();
-  await groupsPage.expectGroupNotVisible(group.name);
+  await groupsPage.expectGroupNotVisible(groupName);
 });
 
 test('TC_AP_128 - Verify Group Name and Code Trim Spaces', async ({ groupsPage }) => {
@@ -119,10 +127,12 @@ test('TC_AP_128 - Verify Group Name and Code Trim Spaces', async ({ groupsPage }
   await groupsPage.openCreateGroupModal();
   await groupsPage.fillCreateForm(`  ${name}  `, `  ${code}  `);
   await groupsPage.submitCreateAndWait();
-  await groupsPage.searchGroups(name);
 
+  await groupsPage.searchGroups(name);
   await groupsPage.expectGroupVisible(name);
-  await expect(groupsPage.groupRow(name).locator('td').nth(1)).toHaveText(name);
+  const row = groupsPage.groupRow(name);
+  await expect(row.locator('td').nth(GROUP_TABLE_COL.name)).toHaveText(name);
+  await expect(row.locator('td').nth(GROUP_TABLE_COL.code)).toHaveText(code);
 
   await groupsPage.deleteGroupIfPossible(name);
   await groupsPage.clearSearch();
@@ -161,11 +171,16 @@ test('TC_AP_131 - Verify Name and Code Mandatory Profile Pic Optional', async ({
 });
 
 test('TC_AP_132 - Verify Mandatory Fields Without Profile Photo', async ({ groupsPage }) => {
-  const group = GroupsData.uniqueGroup('Man');
+  // Name/Code are required (red *); photo is optional — empty Create must show field errors, no API create.
+  await groupsPage.openCreateGroupModal();
+  await groupsPage.expectRequiredFieldMarkers(groupsPage.createModal());
 
-  await groupsPage.createGroup(group.name, group.code);
-  await groupsPage.expectGroupVisible(group.name);
-  await groupsPage.deleteGroupIfPossible(group.name);
+  await groupsPage.submitCreate();
+  await groupsPage.expectValidationMessage(GroupsData.validation.nameSpecialCharsMessage);
+  await groupsPage.expectValidationMessage(GroupsData.validation.codeSpecialCharsMessage);
+  await expect(groupsPage.createModal()).toBeVisible();
+
+  await groupsPage.cancelCreate();
 });
 
 test('TC_AP_133 - Verify Profile Pic Name and Code Fields Present', async ({ groupsPage }) => {
@@ -311,12 +326,23 @@ test('TC_AP_147 - Verify Group Code Minimum 2 Characters', async ({ groupsPage }
 });
 
 test('TC_AP_148 - Verify Group Code Accepts 2 to 15 Characters', async ({ groupsPage }) => {
-  const group = GroupsData.uniqueGroup('Cd');
+  // Valid boundary lengths only — no API create (146/147 already cover invalid lengths).
+  const modal = groupsPage.createModal();
+  const lengthError = GroupsData.validation.codeMinLengthMessage;
+  const minCode = 'AB'; // 2 chars
+  const maxCode = 'C'.repeat(GroupsData.validation.codeMaxLength); // 15 chars
 
-  await groupsPage.createGroup(group.name, group.code);
-  await groupsPage.expectGroupVisible(group.name);
+  await groupsPage.openCreateGroupModal();
 
-  await groupsPage.deleteGroupIfPossible(group.name);
+  await groupsPage.fillCreateForm('ValidGroupName', minCode);
+  await expect(modal.getByText(lengthError)).toHaveCount(0);
+  await expect(modal.getByRole('button', { name: 'Create', exact: true })).toBeEnabled();
+
+  await groupsPage.fillCreateForm('ValidGroupName', maxCode);
+  await expect(modal.getByText(lengthError)).toHaveCount(0);
+  await expect(modal.getByRole('button', { name: 'Create', exact: true })).toBeEnabled();
+
+  await groupsPage.cancelCreate();
 });
 
 test('TC_AP_149 - Verify Group Creation Blocked With Invalid Inputs', async ({ groupsPage }) => {
@@ -331,20 +357,31 @@ test('TC_AP_149 - Verify Group Creation Blocked With Invalid Inputs', async ({ g
 });
 
 test('TC_AP_150 - Verify Edit Organization Group', async ({ groupsPage }) => {
-  const group = GroupsData.uniqueGroup('Edit');
-  const updatedName = `${group.name}Upd`;
+  // Edit an existing API group (skip HQ) — no create/delete.
+  const existing = (await groupsPage.fetchGroups()).find(
+    (group) => group.code !== 'HQ' && group.name !== 'HQ Group',
+  );
+  if (!existing) {
+    throw new Error('No editable group found from API');
+  }
 
-  await groupsPage.createGroup(group.name, group.code);
-  await groupsPage.expectGroupVisible(group.name);
+  await groupsPage.prepareGroupFromApi(existing);
 
-  await groupsPage.openEditGroup(group.name);
+  await groupsPage.openEditGroup(existing.name);
   await expect(groupsPage.page.getByText(GroupsData.editModal.title)).toBeVisible();
   await expect(groupsPage.modalCodeInput(groupsPage.editModal())).toBeDisabled();
 
+  const stamp = Date.now().toString().slice(-6);
+  const updatedName = `${existing.name.slice(0, 44)}${stamp}`.slice(0, 50);
+
   await groupsPage.updateGroupName(updatedName);
+  await groupsPage.searchGroups(updatedName);
   await groupsPage.expectGroupVisible(updatedName);
 
-  await groupsPage.deleteGroupIfPossible(updatedName);
+  // Restore original name so shared env data stays clean.
+  await groupsPage.openEditGroup(updatedName);
+  await groupsPage.updateGroupName(existing.name);
+  await groupsPage.clearSearch();
 });
 
 test('TC_AP_151 - Verify Total Members Opens Members List', async ({ groupsPage }) => {
@@ -364,14 +401,13 @@ test('TC_AP_152 - Verify Back Button Redirects to Groups Page', async ({ groupsP
 });
 
 test('TC_AP_153 - Verify Group Name and Code Must Be Unique', async ({ groupsPage }) => {
-  const group = GroupsData.uniqueGroup('Dup');
+  // Reuse an existing API group — duplicate create must show an error (no seed create/delete).
+  const existing = await groupsPage.getApiAnyGroup();
 
-  await groupsPage.createGroup(group.name, group.code);
   await groupsPage.openCreateGroupModal();
-  await groupsPage.fillCreateForm(group.name, group.code);
+  await groupsPage.fillCreateForm(existing.name, existing.code);
   await groupsPage.submitCreateAndExpectDuplicate();
   await groupsPage.cancelCreate();
-  await groupsPage.deleteGroupIfPossible(group.name);
 });
 
 test('TC_AP_154 - Verify User Can Be Removed From Group Members List', async ({ groupsPage }) => {
