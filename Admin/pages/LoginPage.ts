@@ -22,8 +22,14 @@ export class LoginPage {
   lastLoginOutcome: LoginOutcome = 'pending';
   lastLoginStatus: number | null = null;
 
-  /** Burst login attempts in one worker trigger local UMS rate limits (HTTP 429). */
-  private static loginCallsThisWorker = 0;
+  /**
+   * Local UMS rate-limits burst POSTs to /login (valid and invalid alike).
+   * Space calls across the worker and only back off longer when a real 429 hits.
+   */
+  private static lastLoginApiAtMs = 0;
+  private static readonly LOGIN_API_GAP_MS = 2_500;
+  private static readonly RATE_LIMIT_BACKOFF_MS = 12_000;
+  private static readonly MAX_RATE_LIMIT_ATTEMPTS = 5;
 
   constructor(page: Page) {
     this.page = page;
@@ -118,38 +124,45 @@ export class LoginPage {
    * toast that ant Design auto-dismisses in a few seconds. That race was the main
    * cause of both multi-minute negative tests and flake.
    *
-   * Local UMS rate-limits burst logins — the login spec fires many attempts in one
-   * worker session. Retry when HTTP 429 or the "Too many requests" toast appears.
+   * Negative cases still POST /login, so they count toward UMS rate limits.
+   * Keep a short gap between calls; on HTTP 429 wait longer and retry — never
+   * treat rate-limit as invalid credentials.
    */
   async login(username: string, password: string): Promise<LoginOutcome> {
-    // Space out login API calls so the login spec (many negatives in one worker)
-    // does not hit local UMS "Too many requests" before later cases (15, 16).
-    if (LoginPage.loginCallsThisWorker >= 5) {
-      const cooldownMs = 15_000 * (LoginPage.loginCallsThisWorker - 4);
-      await this.page.waitForTimeout(cooldownMs);
-    }
-
-    LoginPage.loginCallsThisWorker += 1;
-    const maxAttempts = 6;
-
-    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    for (let attempt = 0; attempt < LoginPage.MAX_RATE_LIMIT_ATTEMPTS; attempt += 1) {
       if (attempt > 0) {
-        await this.page.waitForTimeout(20_000 * attempt);
+        await this.page.waitForTimeout(LoginPage.RATE_LIMIT_BACKOFF_MS);
         await this.ensureLoginScreen();
+      } else {
+        await this.waitForLoginApiGap();
       }
 
+      LoginPage.lastLoginApiAtMs = Date.now();
       const outcome = await this.attemptLoginOnce(username, password);
 
       if (!this.isRateLimited(this.lastLoginStatus, this.lastErrorMessage)) {
         return outcome;
       }
 
-      if (attempt === maxAttempts - 1) {
+      if (attempt === LoginPage.MAX_RATE_LIMIT_ATTEMPTS - 1) {
         return outcome;
       }
     }
 
     return this.lastLoginOutcome;
+  }
+
+  /** Ensure consecutive /login POSTs in this worker are spaced apart. */
+  private async waitForLoginApiGap() {
+    if (LoginPage.lastLoginApiAtMs <= 0) {
+      return;
+    }
+
+    const elapsedMs = Date.now() - LoginPage.lastLoginApiAtMs;
+    const remainingMs = LoginPage.LOGIN_API_GAP_MS - elapsedMs;
+    if (remainingMs > 0) {
+      await this.page.waitForTimeout(remainingMs);
+    }
   }
 
   private waitForLoginApi(timeoutMs = 30_000): Promise<Response | undefined> {
@@ -174,6 +187,62 @@ export class LoginPage {
 
     await bundleLoaded;
     await this.username.waitFor({ state: 'visible', timeout: 60_000 });
+    await this.ensureEnglishLanguage();
+  }
+
+  /**
+   * Login page defaults to Japanese. Specs assert English labels/toasts/placeholders,
+   * so force English via the login language picker when needed.
+   */
+  async ensureEnglishLanguage() {
+    if (!(await this.username.isVisible().catch(() => false))) {
+      return;
+    }
+
+    const placeholder = await this.username.getAttribute('placeholder');
+    if (placeholder === loginData.englishUsernamePlaceholder) {
+      return;
+    }
+
+    const englishButton = this.page.getByRole('button', {
+      name: loginData.englishLanguageButtonLabel,
+      exact: true,
+    });
+
+    if (await englishButton.isVisible().catch(() => false)) {
+      await englishButton.click();
+      await expect(this.username).toHaveAttribute(
+        'placeholder',
+        loginData.englishUsernamePlaceholder,
+        { timeout: 15_000 },
+      );
+      return;
+    }
+
+    // Fallback when the picker is unavailable: persist English and reload once.
+    await this.page
+      .evaluate(
+        ({ key, value }) => {
+          try {
+            localStorage.setItem(key, value);
+          } catch {
+            // Ignore storage access errors.
+          }
+        },
+        {
+          key: loginData.languageStorageKey,
+          value: loginData.englishLanguageCode,
+        },
+      )
+      .catch(() => undefined);
+
+    await this.page.reload({ waitUntil: 'commit', timeout: 120_000 });
+    await this.username.waitFor({ state: 'visible', timeout: 60_000 });
+    await expect(this.username).toHaveAttribute(
+      'placeholder',
+      loginData.englishUsernamePlaceholder,
+      { timeout: 15_000 },
+    );
   }
 
   private async clearLoginForm() {
@@ -210,6 +279,7 @@ export class LoginPage {
   async prepareLoginScreenForTest() {
     if (await this.isOnCleanLoginScreen()) {
       await this.dismissErrorMessages();
+      await this.ensureEnglishLanguage();
       return;
     }
 
@@ -218,20 +288,29 @@ export class LoginPage {
 
   private async clearBrowserStorage() {
     await this.page
-      .evaluate(() => {
-        try {
-          localStorage.clear();
-          sessionStorage.clear();
-        } catch {
-          // Ignore on about:blank or other documents that block storage access.
-        }
-      })
+      .evaluate(
+        ({ key, value }) => {
+          try {
+            localStorage.clear();
+            sessionStorage.clear();
+            // Keep English after wipe so the next login load is not Japanese.
+            localStorage.setItem(key, value);
+          } catch {
+            // Ignore on about:blank or other documents that block storage access.
+          }
+        },
+        {
+          key: loginData.languageStorageKey,
+          value: loginData.englishLanguageCode,
+        },
+      )
       .catch(() => undefined);
   }
 
   async ensureLoginScreen() {
     if (await this.isOnCleanLoginScreen()) {
       await this.dismissErrorMessages();
+      await this.ensureEnglishLanguage();
       return;
     }
 
@@ -251,6 +330,7 @@ export class LoginPage {
 
     await this.clearLoginForm();
     await this.dismissErrorMessages();
+    await this.ensureEnglishLanguage();
   }
 
   async resetAfterTest() {
@@ -333,6 +413,14 @@ export class LoginPage {
   }
 
   async expectLoggedIn() {
+    if (this.isRateLimited(this.lastLoginStatus, this.lastErrorMessage)) {
+      throw new Error(
+        `Expected successful login but UMS rate-limited the request (HTTP 429). ` +
+          `toast="${this.lastErrorMessage || '(empty)'}". ` +
+          `Wait for the rate-limit window to clear, or slow the login suite further.`,
+      );
+    }
+
     if (this.lastLoginOutcome === 'error') {
       throw new Error(
         `Expected successful login but got error. ` +
@@ -362,6 +450,15 @@ export class LoginPage {
     }
 
     const message = this.lastErrorMessage || (await this.captureVisibleToast(5_000));
+
+    // FE may show a credentials-style toast on 429 — never treat that as a pass.
+    if (this.isRateLimited(this.lastLoginStatus, message)) {
+      throw new Error(
+        `Expected invalid-credentials response but got UMS rate limit (HTTP 429). ` +
+          `toast="${message || '(none)'}".`,
+      );
+    }
+
     const matched = loginData.invalidCredentialsMessages.some((expected) =>
       message.toLowerCase().includes(expected.toLowerCase()),
     );

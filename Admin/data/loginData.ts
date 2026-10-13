@@ -27,4 +27,11 @@ export const loginData = {
   ],
   usernameRequiredMessage: 'Username is required',
   passwordRequiredMessage: 'Password is required',
+
+  // App product default is Japanese; login specs assert English copy.
+  // Must match frontend `LANGUAGE_STORAGE_KEY` / `ENG_LANG` (automation-only).
+  languageStorageKey: 'gulf_net_admin-language',
+  englishLanguageCode: 'eng',
+  englishLanguageButtonLabel: 'English',
+  englishUsernamePlaceholder: 'Enter Here',
 };

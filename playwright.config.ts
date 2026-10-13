@@ -58,7 +58,7 @@ export default defineConfig({
     {
       name: 'login',
       testMatch: /Login\/.*\.spec\.ts/,
-      // Burst negative logins + local UMS rate-limit cooldowns can exceed 2 minutes.
+      // Login API spacing + occasional 429 backoff; keep headroom for cold local UMS.
       timeout: 300_000,
       use: { ...devices['Desktop Chrome'] },
     },
