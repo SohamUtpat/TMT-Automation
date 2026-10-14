@@ -21,8 +21,8 @@ export async function expectAdminPageReady(page: Page, path: string, title: stri
   await waitForLoadingToFinish(page);
 
   if (normalizedPath === '/settings') {
-    await expect(page.locator('.setting-description')).toBeVisible({ timeout: 60_000 });
-    await expect(page.locator('.stamp-details')).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator('.setting-description').first()).toBeVisible({ timeout: 60_000 });
+    await expect(page.locator('.stamp-details').first()).toBeVisible({ timeout: 30_000 });
     return;
   }
 

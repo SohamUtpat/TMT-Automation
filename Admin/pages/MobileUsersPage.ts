@@ -3,6 +3,7 @@ import path from "path";
 import { getApiBaseUrl } from "../config/appConfig";
 import { MobileUsersData } from "../data/MobileUsersData";
 import type { ApiGroup } from "./GroupsPage";
+import { adminPageTitle } from "../utils/adminPageTitle";
 import {
   ensureAuthenticated as restoreSession,
   isOnLoginPage,
@@ -126,8 +127,7 @@ export class MobileUsersPage {
     }
 
     const [title, createVisible] = await Promise.all([
-      this.page
-        .locator("#pageTitle")
+      adminPageTitle(this.page)
         .textContent()
         .catch(() => ""),
       this.createUserLink()
@@ -314,7 +314,7 @@ export class MobileUsersPage {
       }
     }
 
-    await expect(this.page.locator("#pageTitle")).toHaveText(
+    await expect(adminPageTitle(this.page)).toHaveText(
       MobileUsersData.pageTitle,
       {
         timeout: 90_000,
@@ -980,7 +980,7 @@ export class MobileUsersPage {
       await formCard.click({ position: { x: 8, y: 8 } });
       return;
     }
-    await this.page.locator("#pageTitle").click();
+    await adminPageTitle(this.page).click();
   }
 
   async fillTextField(input: Locator, value: string) {

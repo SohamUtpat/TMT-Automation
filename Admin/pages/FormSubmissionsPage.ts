@@ -9,12 +9,17 @@ import {
 import { writeFile } from "node:fs/promises";
 import { ensureAuthenticated as restoreSession } from "../utils/ensureAuthenticated";
 import { isLocalTarget } from "../config/appConfig";
-import { installLocalSubmissionMocks } from "../fixtures/submissionMock";
+import {
+  installLocalSubmissionMocks,
+  uninstallLocalSubmissionMocks,
+} from "../fixtures/submissionMock";
 
 export const FORM_SUBMISSIONS = {
   path: "/form-submissions",
   title: "Form Submissions",
-  allForms: "All Forms",
+  /** Placeholder shown when no form is selected (replaces former "All Forms" Select). */
+  selectFormPlaceholder: "Select Form",
+  formSearchPlaceholder: "Search",
   formNamesApi: "/form/list/names",
   submissionsApi: "forms/submissions",
   exportApi: "forms/submissions/export",
@@ -90,6 +95,13 @@ export class FormSubmissionsPage {
 
   async resetAfterTest() {
     await this.page.keyboard.press("Escape").catch(() => undefined);
+
+    // Drop local submission routes so later Forms list tests hit the real API
+    // (shared worker page otherwise keeps mock form/get/forms and breaks search).
+    if (isLocalTarget()) {
+      await uninstallLocalSubmissionMocks(this.page);
+    }
+
     if (!this.isOnPage()) {
       return;
     }
@@ -134,27 +146,30 @@ export class FormSubmissionsPage {
     this.page.getByRole("heading", { name: FORM_SUBMISSIONS.title });
 
   formSelect = () =>
-    this.page.locator(".form-submissions-filters-group .ant-select").first();
+    this.page.locator("button.form-submissions-form-picker");
 
-  formCombobox = () => this.formSelect().getByRole("combobox");
+  formSearchInput = () =>
+    this.page.locator(".form-submissions-form-picker-search input");
+
+  /** @deprecated Use formSearchInput — kept for callers that still fill the search field. */
+  formCombobox = () => this.formSearchInput();
 
   selectedFormLabel = () =>
-    this.formSelect().locator(".ant-select-selection-item");
+    this.formSelect().locator(".form-submissions-form-picker-value");
 
-  formClearButton = () => this.formSelect().locator(".ant-select-clear");
+  formClearButton = () =>
+    this.page.locator("button.form-submissions-form-picker-clear");
 
   visibleFormDropdown = () =>
-    this.page
-      .locator(".ant-select-dropdown:not(.ant-select-dropdown-hidden)")
-      .filter({
-        has: this.page.locator(".ant-select-item-option"),
-      });
+    this.page.locator(".form-submissions-form-picker-dropdown");
 
   formOptions = () =>
-    this.visibleFormDropdown().locator(".ant-select-item-option");
+    this.visibleFormDropdown().locator(
+      ".form-submissions-form-picker-option",
+    );
 
-  virtualListHolder = () =>
-    this.visibleFormDropdown().locator(".rc-virtual-list-holder");
+  formOptionsList = () =>
+    this.visibleFormDropdown().locator(".form-submissions-form-picker-list");
 
   fromDateInput = () =>
     this.page.getByPlaceholder(FORM_SUBMISSIONS.fromDatePlaceholder);
@@ -203,6 +218,13 @@ export class FormSubmissionsPage {
     return (await this.selectedFormLabel().textContent())?.trim() ?? "";
   }
 
+  async hasSelectedForm(): Promise<boolean> {
+    const label = await this.getSelectedFormLabel();
+    return (
+      Boolean(label) && label !== FORM_SUBMISSIONS.selectFormPlaceholder
+    );
+  }
+
   async openFormDropdown() {
     if (
       !(await this.visibleFormDropdown()
@@ -236,49 +258,9 @@ export class FormSubmissionsPage {
 
   async getAllFormOptionLabels(): Promise<string[]> {
     await this.openFormDropdown();
-    const holder = this.virtualListHolder();
-    const labels = new Set<string>();
-
-    if (!(await holder.isVisible().catch(() => false))) {
-      return this.getVisibleFormOptionLabels();
-    }
-
-    let previousTop = -1;
-    for (let attempt = 0; attempt < 100; attempt++) {
-      if (!(await holder.isVisible().catch(() => false))) {
-        await this.openFormDropdown();
-        if (!(await holder.isVisible().catch(() => false))) {
-          break;
-        }
-      }
-      for (const label of await this.formOptions().allTextContents()) {
-        const normalized = label.trim();
-        if (normalized) {
-          labels.add(normalized);
-        }
-      }
-
-      const metrics = await holder.evaluate((element) => ({
-        top: element.scrollTop,
-        nextTop: Math.min(
-          element.scrollTop + Math.max(element.clientHeight - 20, 1),
-          element.scrollHeight - element.clientHeight,
-        ),
-        atBottom:
-          element.scrollTop + element.clientHeight >= element.scrollHeight - 1,
-      }));
-      if (metrics.atBottom || metrics.nextTop === previousTop) {
-        break;
-      }
-      previousTop = metrics.nextTop;
-      await holder.evaluate((element, top) => {
-        element.scrollTop = top;
-        element.dispatchEvent(new Event("scroll", { bubbles: true }));
-      }, metrics.nextTop);
-      await this.page.waitForTimeout(50);
-    }
-
-    return [...labels];
+    await this.formSearchInput().fill("");
+    // Custom picker renders all options in the DOM (no virtual list).
+    return this.getVisibleFormOptionLabels();
   }
 
   getLoadedFormNames(): string[] {
@@ -287,37 +269,34 @@ export class FormSubmissionsPage {
 
   async dropdownHasScrollableList(): Promise<boolean> {
     await this.openFormDropdown();
-    const holder = this.virtualListHolder();
-    if (!(await holder.isVisible().catch(() => false))) {
+    const list = this.formOptionsList();
+    if (!(await list.isVisible().catch(() => false))) {
       return false;
     }
-    return holder.evaluate(
+    return list.evaluate(
       (element) => element.scrollHeight > element.clientHeight + 1,
     );
   }
 
   async searchFormOptions(term: string): Promise<string[]> {
     await this.openFormDropdown();
-    await this.formCombobox().fill(term);
+    await this.formSearchInput().fill(term);
     await this.page.waitForTimeout(100);
-    const holder = this.virtualListHolder();
-    if (await holder.isVisible().catch(() => false)) {
-      await holder.evaluate((element) => {
-        element.scrollTop = 0;
-        element.dispatchEvent(new Event("scroll", { bubbles: true }));
-      });
-    }
-    return this.getAllFormOptionLabels();
+    return this.formOptions().evaluateAll((options) =>
+      options
+        .map((option) => (option.textContent ?? "").trim())
+        .filter(Boolean),
+    );
   }
 
   async selectForm(formName: string): Promise<RequestQuery> {
     await this.openFormDropdown();
-    await this.formCombobox().fill(formName);
+    await this.formSearchInput().fill(formName);
     await this.page.waitForTimeout(100);
 
     const requestPromise = this.waitForSubmissionRequest({ formName });
     const option = this.formOptions().filter({ hasText: formName }).first();
-    await option.click({ force: true });
+    await option.click();
     const request = await requestPromise;
     await this.waitForTableIdle();
     await expect(this.selectedFormLabel()).toHaveText(formName);
@@ -327,8 +306,7 @@ export class FormSubmissionsPage {
   async selectFirstSpecificForm(): Promise<string | null> {
     const labels = await this.getAllFormOptionLabels();
     await this.closeFormDropdown();
-    const formName =
-      labels.find((label) => label !== FORM_SUBMISSIONS.allForms) ?? null;
+    const formName = labels[0] ?? null;
     if (formName) {
       await this.selectForm(formName);
     }
@@ -336,15 +314,18 @@ export class FormSubmissionsPage {
   }
 
   async clearFormSelection(): Promise<RequestQuery> {
-    if ((await this.getSelectedFormLabel()) === FORM_SUBMISSIONS.allForms) {
+    if (!(await this.hasSelectedForm())) {
       return {};
     }
+    await this.openFormDropdown();
     const requestPromise = this.waitForSubmissionRequest({ formName: null });
-    await this.formSelect().hover();
-    await expect(this.formClearButton()).toBeVisible();
+    await expect(this.formClearButton()).toBeEnabled();
     await this.formClearButton().click();
     const request = await requestPromise;
     await this.waitForTableIdle();
+    await expect(this.selectedFormLabel()).toHaveText(
+      FORM_SUBMISSIONS.selectFormPlaceholder,
+    );
     return this.queryFromRequest(request);
   }
 

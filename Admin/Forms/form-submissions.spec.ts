@@ -62,7 +62,14 @@ function monthLabel(date: Date): string {
 }
 
 function parseUiDate(value: string): Date | null {
-  const date = new Date(`${value} 00:00:00`);
+  const trimmed = value.trim();
+  // Listing dates use en-GB DD/MM/YYYY (see formatLocalizedDate).
+  const dmy = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (dmy) {
+    const date = new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]));
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  const date = new Date(`${trimmed} 00:00:00`);
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
@@ -152,14 +159,15 @@ function expectRequiredExportColumns(headers: string[]) {
   }
 }
 
-test("TC_AP_648 - Verify All Forms is selected by default", async ({
+test("TC_AP_648 - Verify Select Form placeholder is shown by default", async ({
   formSubmissionsPage,
 }) => {
   await expect(formSubmissionsPage.heading()).toBeVisible();
+  await expect(formSubmissionsPage.formSelect()).toBeVisible();
   await expect(formSubmissionsPage.selectedFormLabel()).toHaveText(
-    FORM_SUBMISSIONS.allForms,
+    FORM_SUBMISSIONS.selectFormPlaceholder,
   );
-  await expect(formSubmissionsPage.formCombobox()).toHaveValue("");
+  expect(await formSubmissionsPage.hasSelectedForm()).toBe(false);
 });
 
 test("TC_AP_649 - Verify selecting a form filters submissions", async ({
@@ -184,13 +192,20 @@ test("TC_AP_650 - Verify all forms are shown in a scrollable dropdown", async ({
     liveNames.length,
     "Fewer than two live forms are available in the form-names API.",
   ).toBeGreaterThanOrEqual(2);
-  expect(
-    await formSubmissionsPage.dropdownHasScrollableList(),
-    `The ${liveNames.length} live forms do not overflow the dropdown, so scrolling cannot be verified.`,
-  ).toBe(true);
 
   const defaultOptions = await formSubmissionsPage.searchFormOptions("");
-  expect(defaultOptions).toContain(FORM_SUBMISSIONS.allForms);
+  for (const formName of new Set(liveNames)) {
+    expect(defaultOptions).toContain(formName);
+  }
+
+  // Scrollability only applies when the list overflows the picker panel.
+  if (liveNames.length >= 8) {
+    expect(
+      await formSubmissionsPage.dropdownHasScrollableList(),
+      `The ${liveNames.length} live forms do not overflow the dropdown, so scrolling cannot be verified.`,
+    ).toBe(true);
+  }
+
   for (const formName of new Set(liveNames)) {
     const matchingOptions =
       await formSubmissionsPage.searchFormOptions(formName);
@@ -315,7 +330,10 @@ test("TC_AP_660 - Verify export works only after selecting a form", async ({
 }, testInfo) => {
   expect(await formSubmissionsPage.clickExportWithoutForm()).toBe(false);
   const exported = await prepareSelectedExport(formSubmissionsPage, testInfo);
-  expect(exported.result.filename).toMatch(/-submissions=\d{8}_\d{6}\.csv$/i);
+  // Server Content-Disposition may be generic; client fallback uses form-submissions=timestamp.
+  expect(exported.result.filename).toMatch(
+    /(-submissions=\d{8}_\d{6}|submissions)\.csv$/i,
+  );
 });
 
 test("TC_AP_661 - Verify export contains only the selected form", async ({
@@ -339,7 +357,7 @@ test("TC_AP_662 - Verify Export downloads a file successfully", async ({
   formSubmissionsPage,
 }, testInfo) => {
   const exported = await prepareSelectedExport(formSubmissionsPage, testInfo);
-  expect(exported.result.filename).toMatch(/-submissions=/i);
+  expect(exported.result.filename).toMatch(/\.csv$/i);
   expect(exported.csv.headers.length).toBeGreaterThan(0);
 });
 

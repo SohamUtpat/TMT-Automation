@@ -62,6 +62,7 @@ export const FormsData = {
       imagePreviewAlt: "Preview",
       imageAccept: ".png,.jpg,.jpeg",
       chooseFile: "Choose File",
+      browseFile: "Browse File",
       remove: "Remove",
       cancel: "Cancel",
     },

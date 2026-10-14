@@ -127,11 +127,13 @@ test('TC_AP_98 - Verify Invalid Data Cannot Be Saved', async ({ settingsPage }) 
 
 test('TC_AP_99 - Verify Support And Stamp Fields On Settings Page', async ({ settingsPage }) => {
   const apiSettings = await settingsPage.fetchSettingsFromApi();
-  const { total: standardTotal } = await settingsPage.fetchStandardStampsFromApi();
   const { total: approvalTotal } = await settingsPage.fetchApprovalStampsFromApi();
 
   for (const field of SettingsData.supportFields) {
     await expect(settingsPage.supportDetailsSection().getByText(field, { exact: false })).toBeVisible();
+  }
+  for (const field of SettingsData.languageFields) {
+    await expect(settingsPage.defaultLanguageSection().getByText(field, { exact: false })).toBeVisible();
   }
   expect(apiSettings.url).toBeTruthy();
   expect(apiSettings.email).toBeTruthy();
@@ -139,40 +141,38 @@ test('TC_AP_99 - Verify Support And Stamp Fields On Settings Page', async ({ set
   await expect(settingsPage.stampsSection()).toBeVisible();
   await expect(settingsPage.seeAllStampsButton()).toBeVisible();
   await expect(settingsPage.uploadNewStampButton()).toBeVisible();
-  expect(standardTotal).toBeGreaterThanOrEqual(0);
   expect(approvalTotal).toBeGreaterThanOrEqual(0);
 
   await settingsPage.openSeeAllStamps();
-  await expect(settingsPage.settingsModal().getByText(SettingsData.stamps.tabs.standard)).toBeVisible();
-  await expect(settingsPage.settingsModal().getByText(SettingsData.stamps.tabs.approval)).toBeVisible();
+  await expect(settingsPage.settingsModal().getByText(SettingsData.stamps.modalTitle)).toBeVisible();
   await settingsPage.closeModal();
 });
 
 test('TC_AP_100 - Verify Stamps Can Be Viewed', async ({ settingsPage }) => {
-  const { stamps: standardStamps } = await settingsPage.fetchStandardStampsFromApi();
-  expect(standardStamps.length, 'No standard stamps returned from API').toBeGreaterThan(0);
+  const { stamps: approvalStamps } = await settingsPage.fetchApprovalStampsFromApi();
+  expect(approvalStamps.length, 'No approval stamps returned from API').toBeGreaterThan(0);
 
   await expect(settingsPage.stampPreviewImages().first()).toBeVisible({ timeout: 30_000 });
 
-  await settingsPage.openSeeAllStamps({ tab: 'standard' });
+  await settingsPage.openSeeAllStamps();
   expect(await settingsPage.stampImagesInModal().count()).toBeGreaterThan(0);
   await settingsPage.closeModal();
 });
 
 test('TC_AP_101 - Verify Stamp Can Be Deleted', async ({ settingsPage }) => {
-  const { stamps } = await settingsPage.fetchStandardStampsFromApi();
-  expect(stamps.length, 'No standard stamps available from API to delete').toBeGreaterThan(0);
+  const { stamps } = await settingsPage.fetchApprovalStampsFromApi();
+  expect(stamps.length, 'No approval stamps available from API to delete').toBeGreaterThan(0);
 
-  await settingsPage.openSeeAllStamps({ tab: 'standard' });
+  await settingsPage.openSeeAllStamps();
   await settingsPage.deleteFirstStampInModal();
   await settingsPage.closeModal();
 });
 
 test('TC_AP_102 - Verify Message After Stamp Deletion', async ({ settingsPage }) => {
-  const { stamps } = await settingsPage.fetchStandardStampsFromApi();
-  expect(stamps.length, 'No standard stamps available from API to delete').toBeGreaterThan(0);
+  const { stamps } = await settingsPage.fetchApprovalStampsFromApi();
+  expect(stamps.length, 'No approval stamps available from API to delete').toBeGreaterThan(0);
 
-  await settingsPage.openSeeAllStamps({ tab: 'standard' });
+  await settingsPage.openSeeAllStamps();
   await settingsPage.deleteFirstStampInModal();
   await expect(settingsPage.toast(SettingsData.messages.stampDeleted)).toBeVisible();
   await settingsPage.closeModal();
@@ -231,10 +231,10 @@ test('TC_AP_111 - Verify User Can Add Multiple Stamps', async ({ settingsPage })
 });
 
 test('TC_AP_112 - Verify Stamps Visible In See All View', async ({ settingsPage }) => {
-  const { stamps } = await settingsPage.fetchStandardStampsFromApi();
-  expect(stamps.length, 'No standard stamps returned from API').toBeGreaterThan(0);
+  const { stamps } = await settingsPage.fetchApprovalStampsFromApi();
+  expect(stamps.length, 'No approval stamps returned from API').toBeGreaterThan(0);
 
-  await settingsPage.openSeeAllStamps({ tab: 'standard' });
+  await settingsPage.openSeeAllStamps();
   await expect(settingsPage.stampImagesInModal().first()).toBeVisible({ timeout: 30_000 });
   await expect(settingsPage.stampDeleteIcons().first()).toBeVisible();
   await settingsPage.closeModal();

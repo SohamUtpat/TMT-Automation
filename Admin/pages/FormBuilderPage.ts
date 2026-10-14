@@ -246,8 +246,14 @@ export class FormBuilderPage {
   previewFileInput = (label: string) =>
     this.previewField(label).locator('input[type="file"]');
 
+  /** Visible Ant Upload trigger in the builder preview (native file input stays hidden). */
+  previewUploadButton = (label: string) =>
+    this.previewField(label).getByRole("button", {
+      name: FormsData.builder.labels.browseFile,
+    });
+
   previewDateInput = (label: string) =>
-    this.previewField(label).locator('input[type="date"]');
+    this.previewField(label).locator(".ant-picker input").first();
 
   previewTimeInput = (label: string) =>
     this.previewField(label).locator('input[type="time"]');

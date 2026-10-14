@@ -1,5 +1,6 @@
 import { test, expect } from '../fixtures/forms.fixture';
 import { FormsData } from '../data/FormsData';
+import { adminPageTitle } from '../utils/adminPageTitle';
 
 test('TC_AP_307 - Verify Forms page loads successfully', async ({ formsPage }) => {
   await expect(formsPage.page).toHaveURL(new RegExp(`${FormsData.path}$`));
@@ -7,7 +8,7 @@ test('TC_AP_307 - Verify Forms page loads successfully', async ({ formsPage }) =
 });
 
 test('TC_AP_308 - Verify UI elements on Form page', async ({ formsPage }) => {
-  await expect(formsPage.page.locator('#pageTitle')).toHaveText(FormsData.pageTitle);
+  await expect(adminPageTitle(formsPage.page)).toHaveText(FormsData.pageTitle);
   await expect(formsPage.searchInput()).toBeVisible();
   await expect(formsPage.table()).toBeVisible();
   await expect(formsPage.formBuilderButton()).toBeVisible();

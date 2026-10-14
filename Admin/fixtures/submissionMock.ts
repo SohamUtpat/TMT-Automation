@@ -108,27 +108,44 @@ function buildExportCsv(submissions: MockSubmission[]): string {
   return [header, ...rows].join("\n");
 }
 
-function buildFormsListResponse() {
+function buildMockForms() {
+  return [
+    {
+      id: "mock-form-id-1",
+      name: MOCK_SUBMISSION_FORM,
+      description: "Automation mock form",
+    },
+    {
+      id: "mock-form-id-2",
+      name: MOCK_SUBMISSION_FORM_ALT,
+      description: "Automation mock form B",
+    },
+  ];
+}
+
+function buildFormsListResponse(search?: string | null) {
+  const needle = search?.trim().toLowerCase() ?? "";
+  const forms = needle
+    ? buildMockForms().filter(
+        (form) =>
+          form.name.toLowerCase().includes(needle) ||
+          form.description.toLowerCase().includes(needle),
+      )
+    : buildMockForms();
+
   return {
     data: {
-      forms: [
-        {
-          id: "mock-form-id-1",
-          name: MOCK_SUBMISSION_FORM,
-          description: "Automation mock form",
-        },
-        {
-          id: "mock-form-id-2",
-          name: MOCK_SUBMISSION_FORM_ALT,
-          description: "Automation mock form B",
-        },
-      ],
-      count: 2,
-      total: 2,
+      forms,
+      count: forms.length,
+      total: forms.length,
     },
     message: "OK",
   };
 }
+
+const ROUTE_FORM_NAMES = "**/form/list/names**";
+const ROUTE_FORM_LIST = "**/form/get/forms**";
+const ROUTE_SUBMISSIONS = "**/forms/submissions**";
 
 function isSubmissionExportUrl(url: URL): boolean {
   return (
@@ -136,21 +153,24 @@ function isSubmissionExportUrl(url: URL): boolean {
   );
 }
 
-function isSubmissionListUrl(url: URL): boolean {
-  return (
-    url.pathname.includes("/forms/submissions") &&
-    !url.pathname.includes("/forms/submissions/export")
-  );
+/** Remove local submission mocks so later Forms list tests use the real API. */
+export async function uninstallLocalSubmissionMocks(page: Page): Promise<void> {
+  for (const pattern of [ROUTE_FORM_NAMES, ROUTE_FORM_LIST, ROUTE_SUBMISSIONS]) {
+    await page.unroute(pattern).catch(() => undefined);
+  }
 }
 
 export async function installLocalSubmissionMocks(page: Page): Promise<boolean> {
+  // Avoid stacking handlers when navigate() runs again on the shared worker page.
+  await uninstallLocalSubmissionMocks(page);
+
   const submissions = buildMockSubmissions();
   const formNames = [
     ...submissions.map((row) => row.formName),
     ...Array.from({ length: 12 }, (_, index) => `Automation Form ${index + 3}`),
   ];
 
-  await page.route("**/form/list/names**", async (route) => {
+  await page.route(ROUTE_FORM_NAMES, async (route) => {
     if (route.request().method() !== "GET") {
       await route.continue();
       return;
@@ -167,50 +187,45 @@ export async function installLocalSubmissionMocks(page: Page): Promise<boolean> 
     });
   });
 
-  await page.route("**/form/get/forms**", async (route) => {
+  await page.route(ROUTE_FORM_LIST, async (route) => {
     if (route.request().method() !== "GET") {
       await route.continue();
       return;
     }
 
+    const search = new URL(route.request().url()).searchParams.get("search");
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
         status: 0,
-        ...buildFormsListResponse(),
+        ...buildFormsListResponse(search),
       }),
     });
   });
 
-  await page.route((url) => isSubmissionExportUrl(url), async (route) => {
+  await page.route(ROUTE_SUBMISSIONS, async (route) => {
     if (route.request().method() !== "GET") {
       await route.continue();
       return;
     }
 
-    const params = new URL(route.request().url()).searchParams;
+    const url = new URL(route.request().url());
+    const params = url.searchParams;
     const filtered = filterSubmissions(submissions, params);
-    await route.fulfill({
-      status: 200,
-      contentType: "text/csv; charset=utf-8",
-      headers: {
-        "Content-Disposition": 'attachment; filename="submissions.csv"',
-      },
-      body: buildExportCsv(filtered),
-    });
-  });
 
-  await page.route((url) => isSubmissionListUrl(url), async (route) => {
-    if (route.request().method() !== "GET") {
-      await route.continue();
+    if (isSubmissionExportUrl(url)) {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/csv; charset=utf-8",
+        headers: {
+          "Content-Disposition": 'attachment; filename="submissions.csv"',
+        },
+        body: buildExportCsv(filtered),
+      });
       return;
     }
 
-    const filtered = filterSubmissions(
-      submissions,
-      new URL(route.request().url()).searchParams,
-    );
     await route.fulfill({
       status: 200,
       contentType: "application/json",

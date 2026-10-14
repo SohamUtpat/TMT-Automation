@@ -3,6 +3,7 @@ import path from 'path';
 import { ChangePasswordPage, type TestAdminCredentials } from '../pages/ChangePasswordPage';
 import { LoginPage } from '../pages/LoginPage';
 import { loginData } from '../data/loginData';
+import { adminPageTitle } from '../utils/adminPageTitle';
 
 const authFile = path.join(__dirname, '../../playwright/.auth/admin.json');
 const emptyStorageState = { cookies: [], origins: [] } as const;
@@ -32,7 +33,7 @@ async function loginAsTestUser(page: Page, credentials: TestAdminCredentials) {
   }
 
   await page.goto('/dashboard', { waitUntil: 'commit', timeout: 120_000 }).catch(() => undefined);
-  await expect(page.locator('#pageTitle')).toBeVisible({ timeout: 60_000 });
+  await expect(adminPageTitle(page)).toBeVisible({ timeout: 60_000 });
 }
 
 type ChangePasswordFixtures = {

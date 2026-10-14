@@ -2,6 +2,7 @@ import { expect, type Locator, type Page, type Route } from '@playwright/test';
 import { getApiBaseUrl } from '../config/appConfig';
 import { ChangePasswordData } from '../data/ChangePasswordData';
 import { loginData } from '../data/loginData';
+import { adminPageTitle } from '../utils/adminPageTitle';
 import { ensureAuthenticated as restoreSession } from '../utils/ensureAuthenticated';
 import { expectAdminPageReady } from '../utils/pageReady';
 import {
@@ -94,7 +95,7 @@ export class ChangePasswordPage {
 
     if (needsPasswordRestore) {
       // Successful password-change tests log out to the login screen.
-      if (onLoginPage || !(await this.page.locator('#pageTitle').isVisible().catch(() => false))) {
+      if (onLoginPage || !(await adminPageTitle(this.page).isVisible().catch(() => false))) {
         await this.page.goto(loginData.baseUrl, { waitUntil: 'commit', timeout: 120_000 }).catch(() => undefined);
         await restoreSession(this.page, {
           username: credentials.userName,

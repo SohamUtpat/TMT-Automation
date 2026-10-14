@@ -1,6 +1,7 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 import { getBaseUrl } from "../config/appConfig";
 import { FormsData } from "../data/FormsData";
+import { adminPageTitle } from "../utils/adminPageTitle";
 import { ensureAuthenticated as restoreSession } from "../utils/ensureAuthenticated";
 import type { ApiGroup } from "./GroupsPage";
 
@@ -82,7 +83,7 @@ export class FormsPage {
   }
 
   async expectFormsTitle() {
-    await expect(this.page.locator("#pageTitle")).toHaveText(
+    await expect(adminPageTitle(this.page)).toHaveText(
       FormsData.pageTitle,
       { timeout: 30_000 },
     );
@@ -96,7 +97,7 @@ export class FormsPage {
         .catch(() => undefined);
     }
 
-    await expect(this.page.locator("#pageTitle")).toHaveText(
+    await expect(adminPageTitle(this.page)).toHaveText(
       FormsData.pageTitle,
       { timeout: 30_000 },
     );

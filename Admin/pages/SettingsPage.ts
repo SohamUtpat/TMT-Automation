@@ -2,6 +2,7 @@ import { expect, type Locator, type Page } from '@playwright/test';
 import path from 'path';
 import { getApiBaseUrl } from '../config/appConfig';
 import { SettingsData } from '../data/SettingsData';
+import { adminPageTitle } from '../utils/adminPageTitle';
 import { ensureAuthenticated as restoreSession } from '../utils/ensureAuthenticated';
 
 const authFile = path.join(__dirname, '../../playwright/.auth/admin.json');
@@ -33,11 +34,32 @@ export class SettingsPage {
 
   // ── Navigation ──────────────────────────────────────────────────────────────
 
-  supportDetailsSection = () => this.page.locator('.setting-description');
+  /**
+   * Support Details and User's Default Language both use `.setting-description`.
+   * Scope each section by its Ant Descriptions title so Playwright strict mode
+   * does not match both nodes.
+   */
+  supportDetailsSection = () =>
+    this.page
+      .locator('.setting-description')
+      .filter({ has: this.page.locator('.ant-descriptions-title', { hasText: /Support Details/i }) })
+      .first();
+
+  defaultLanguageSection = () =>
+    this.page
+      .locator('.setting-description')
+      .filter({
+        has: this.page.locator('.ant-descriptions-title', {
+          hasText: /User'?s Default Language|Default Language/i,
+        }),
+      })
+      .first();
 
   stampsSection = () => this.page.locator('.stamp-details');
 
   supportEditIcon = () => this.supportDetailsSection().locator('img[src*="edit_icon"]');
+
+  languageEditIcon = () => this.defaultLanguageSection().locator('img[src*="edit_icon"]');
 
   seeAllStampsButton = () => this.page.getByRole('button', { name: /see all/i });
 
@@ -119,6 +141,7 @@ export class SettingsPage {
       await loading.first().waitFor({ state: 'hidden', timeout: 90_000 }).catch(() => undefined);
     }
     await expect(this.supportDetailsSection()).toBeVisible({ timeout: 60_000 });
+    await expect(this.defaultLanguageSection()).toBeVisible({ timeout: 30_000 });
     await expect(this.stampsSection()).toBeVisible({ timeout: 30_000 });
   }
 
@@ -189,13 +212,13 @@ export class SettingsPage {
     return null;
   }
 
-  /** GET /settings/stamp?version=2&type={type}&page=0&size=25 — type 0 = Standard, type 1 = Approval. */
+  /** GET /settings/stamp?version=2&type={type}&page=0&size=25 — UI currently uses approval (type 1) only. */
   async fetchStampsFromApi(
     options: { page?: number; size?: number; type?: number; version?: number } = {},
   ): Promise<StampsApiResult> {
     const page = options.page ?? SettingsData.stamps.api.page;
     const size = options.size ?? SettingsData.stamps.api.size;
-    const type = options.type ?? SettingsData.stamps.types.standard;
+    const type = options.type ?? SettingsData.stamps.types.approval;
     const version = options.version ?? SettingsData.stamps.api.version;
     const query = `version=${version}&type=${type}&page=${page}&size=${size}`;
 
@@ -293,7 +316,7 @@ export class SettingsPage {
       .filter((stamp): stamp is ApiStamp => stamp !== null);
   }
 
-  async getApiActiveStamp(type: number = SettingsData.stamps.types.standard): Promise<ApiStamp> {
+  async getApiActiveStamp(type: number = SettingsData.stamps.types.approval): Promise<ApiStamp> {
     const { stamps } = await this.fetchStampsFromApi({ type });
     const active = stamps.find((stamp) => stamp.status === 'Active' || stamp.status === '1') ?? stamps[0];
 
@@ -357,6 +380,15 @@ export class SettingsPage {
     await expect(this.supportFormUrlInput()).toBeVisible({ timeout: 15_000 });
   }
 
+  /** Language lives in its own Settings section/modal (not Support Details). */
+  async openDefaultLanguageEdit() {
+    await this.languageEditIcon().click();
+    await expect(this.settingsModal()).toBeVisible({ timeout: 15_000 });
+    await expect(
+      this.settingsModal().locator('.language-class-setting, .language-class').first(),
+    ).toBeVisible({ timeout: 15_000 });
+  }
+
   /** Set an Ant Design / React input so FormBuilder ON_FIELD_CHANGE receives the value. */
   private async setSupportFormField(input: Locator, value: string) {
     await expect(input).toBeVisible({ timeout: 15_000 });
@@ -377,6 +409,7 @@ export class SettingsPage {
     url?: string;
     email?: string;
     contact?: string;
+    /** Ignored here — language is edited via the Default Language modal. */
     languageLabel?: string;
   }) {
     if (data.url !== undefined) {
@@ -388,29 +421,28 @@ export class SettingsPage {
     if (data.contact !== undefined) {
       await this.setSupportFormField(this.supportFormContactInput(), data.contact);
     }
-    if (data.languageLabel) {
-      const languageCode = this.mapLanguageLabelToCode(data.languageLabel);
-      const group = this.settingsModal().locator('.language-class-setting, .language-class').first();
-      const radio = group.locator(`input[type="radio"][value="${languageCode}"]`);
-      await expect(radio).toBeAttached({ timeout: 15_000 });
+  }
 
-      // Skip re-clicking when already selected — AntRadioButton.componentDidUpdate can
-      // clobber other form field values if we force a language toggle.
-      if (await radio.isChecked()) {
-        return;
-      }
+  async selectLanguageRadio(languageLabel: string) {
+    const languageCode = this.mapLanguageLabelToCode(languageLabel);
+    const group = this.settingsModal().locator('.language-class-setting, .language-class').first();
+    const radio = group.locator(`input[type="radio"][value="${languageCode}"]`);
+    await expect(radio).toBeAttached({ timeout: 15_000 });
 
-      const option = group.getByText(data.languageLabel, { exact: true });
-      if (languageCode !== SettingsData.languages.english.code) {
-        const englishOption = group.getByText(SettingsData.languages.english.label, { exact: true });
-        await englishOption.click();
-        await this.page.waitForTimeout(200);
-      }
-      await option.click();
-      await this.page.waitForTimeout(200);
-      await option.click();
-      await expect(radio).toBeChecked({ timeout: 5_000 });
+    if (await radio.isChecked()) {
+      return;
     }
+
+    const option = group.getByText(languageLabel, { exact: true });
+    if (languageCode !== SettingsData.languages.english.code) {
+      const englishOption = group.getByText(SettingsData.languages.english.label, { exact: true });
+      await englishOption.click();
+      await this.page.waitForTimeout(200);
+    }
+    await option.click();
+    await this.page.waitForTimeout(200);
+    await option.click();
+    await expect(radio).toBeChecked({ timeout: 5_000 });
   }
 
   /**
@@ -481,15 +513,28 @@ export class SettingsPage {
   }
 
   async updateSupportDetails(data: Parameters<SettingsPage['fillSupportForm']>[0]) {
-    await this.openSupportDetailsEdit();
-    await this.fillSupportForm(data);
-    await this.submitSupportForm();
+    const hasSupportFields =
+      data.url !== undefined || data.email !== undefined || data.contact !== undefined;
+
+    // Support Details modal no longer includes language — preserve language via API defaults.
+    if (hasSupportFields) {
+      await this.openSupportDetailsEdit();
+      await this.fillSupportForm(data);
+      await this.submitSupportForm();
+      return;
+    }
+
+    if (data.languageLabel) {
+      await this.openDefaultLanguageEdit();
+      await this.selectLanguageRadio(data.languageLabel);
+      await this.submitSupportForm();
+    }
   }
 
-  /** Select a language radio in the edit modal and assert it is checked (UI-only, no save). */
+  /** Select a language radio in the Default Language modal (UI-only, no save). */
   async selectLanguageInEditModal(languageLabel: string) {
-    await this.openSupportDetailsEdit();
-    await this.fillSupportForm({ languageLabel });
+    await this.openDefaultLanguageEdit();
+    await this.selectLanguageRadio(languageLabel);
     const languageCode = this.mapLanguageLabelToCode(languageLabel);
     const radio = this.settingsModal().locator(`input[type="radio"][value="${languageCode}"]`);
     await expect(radio).toBeChecked({ timeout: 5_000 });
@@ -506,7 +551,9 @@ export class SettingsPage {
   }
 
   async expectDisplayedLanguage(displayedLabel: string) {
-    const languagesRow = this.supportDetailsSection().locator('tr').filter({ hasText: /Languages|ภาษา|言語/i });
+    const languagesRow = this.defaultLanguageSection()
+      .locator('tr')
+      .filter({ hasText: /Languages|ภาษา|言語/i });
     await expect(languagesRow).toContainText(displayedLabel, { timeout: 15_000 });
   }
 
@@ -521,11 +568,23 @@ export class SettingsPage {
 
   // ── Stamps ──────────────────────────────────────────────────────────────────
 
+  /**
+   * Legacy Standard/Approval tabs were removed — See All is approval-only.
+   * Keep this as a soft no-op when tab controls are absent so older call sites still work.
+   */
   async selectStampTab(tab: 'standard' | 'approval') {
     const label =
       tab === 'approval' ? SettingsData.stamps.tabs.approval : SettingsData.stamps.tabs.standard;
     const type =
       tab === 'approval' ? SettingsData.stamps.types.approval : SettingsData.stamps.types.standard;
+    const tabControl = this.settingsModal()
+      .getByRole('tab', { name: label })
+      .or(this.settingsModal().locator('.ant-tabs-tab').filter({ hasText: label }));
+
+    if (!(await tabControl.first().isVisible().catch(() => false))) {
+      return;
+    }
+
     const stampResponse = this.page
       .waitForResponse(
         (resp) => resp.url().includes('/settings/stamp') && resp.url().includes(`type=${type}`),
@@ -533,13 +592,16 @@ export class SettingsPage {
       )
       .catch(() => undefined);
 
-    await this.settingsModal().getByText(label, { exact: true }).click();
+    await tabControl.first().click();
     await stampResponse;
   }
 
   async openSeeAllStamps(options: { tab?: 'standard' | 'approval' } = {}) {
     await this.seeAllStampsButton().click();
     await expect(this.settingsModal()).toBeVisible({ timeout: 15_000 });
+    await expect(this.settingsModal().getByText(SettingsData.stamps.modalTitle)).toBeVisible({
+      timeout: 15_000,
+    });
     if (options.tab) {
       await this.selectStampTab(options.tab);
     }
@@ -596,7 +658,8 @@ export class SettingsPage {
 
   async expectDashboardTitle(title: string) {
     await this.page.goto('/dashboard', { waitUntil: 'commit', timeout: 120_000 });
-    await expect(this.page.locator('#pageTitle')).toHaveText(title, { timeout: 60_000 });
+    // Newer UI uses `.listing-page-heading h1`; `#pageTitle` is legacy-only.
+    await expect(adminPageTitle(this.page)).toHaveText(title, { timeout: 60_000 });
   }
 
   async logoutAndLoginAgain() {

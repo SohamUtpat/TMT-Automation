@@ -585,25 +585,30 @@ async function runSimpleCase(
 
   const label = uniqueLabel(`${type}-preview`);
   await formBuilderPage.addElement(type, { label });
-  const input =
-    type === "date"
-      ? formBuilderPage.previewDateInput(label)
-      : type === "time"
-        ? formBuilderPage.previewTimeInput(label)
-        : formBuilderPage.previewFileInput(label);
-  await expect(input).toBeVisible();
-  if (type === "imageUpload")
+  if (type === "date") {
+    await expect(formBuilderPage.previewDateInput(label)).toBeVisible();
+    return;
+  }
+  if (type === "time") {
+    await expect(formBuilderPage.previewTimeInput(label)).toBeVisible();
+    return;
+  }
+
+  // imageUpload / fileUpload: Ant Design Upload keeps the native file input hidden.
+  await expect(formBuilderPage.previewUploadButton(label)).toBeVisible();
+  const input = formBuilderPage.previewFileInput(label);
+  await expect(input).toBeAttached();
+  if (type === "imageUpload") {
     await expect(input).toHaveAttribute(
       "accept",
       FormsData.builder.labels.imageAccept,
     );
-  if (type === "imageUpload" || type === "fileUpload") {
-    expect(
-      await input.evaluate(
-        (element: HTMLInputElement) => element.files?.length ?? -1,
-      ),
-    ).toBe(0);
   }
+  expect(
+    await input.evaluate(
+      (element: HTMLInputElement) => element.files?.length ?? -1,
+    ),
+  ).toBe(0);
 }
 
 const imageAttachmentCases: SimpleCase[] = [
