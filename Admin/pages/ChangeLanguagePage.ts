@@ -1,5 +1,6 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import { ChangeLanguageData } from '../data/ChangeLanguageData';
+import { adminPageTitle } from '../utils/adminPageTitle';
 import { ensureAuthenticated as restoreSession } from '../utils/ensureAuthenticated';
 import { expectAdminPageReady } from '../utils/pageReady';
 
@@ -46,7 +47,7 @@ export class ChangeLanguagePage {
       await this.page.goto('/dashboard', { waitUntil: 'commit', timeout: 120_000 });
     }
 
-    await expect(this.page.locator('#pageTitle')).toBeVisible({ timeout: 60_000 });
+    await expect(adminPageTitle(this.page)).toBeVisible({ timeout: 60_000 });
   }
 
   async openFromProfileMenu() {
@@ -188,7 +189,7 @@ export class ChangeLanguagePage {
     if (!new URL(this.page.url()).pathname.includes('/dashboard')) {
       await this.page.goto('/dashboard', { waitUntil: 'commit', timeout: 60_000 });
     }
-    await expect(this.page.locator('#pageTitle')).toHaveText(title, { timeout: 30_000 });
+    await expect(adminPageTitle(this.page)).toHaveText(title, { timeout: 30_000 });
   }
 
   async expectButtonPointerCursor(button: Locator) {
@@ -206,7 +207,7 @@ export class ChangeLanguagePage {
       return (await this.changeLanguagePageTitle().textContent())?.trim() ?? '';
     }
 
-    return (await this.page.locator('#pageTitle').textContent())?.trim() ?? '';
+    return (await adminPageTitle(this.page).textContent())?.trim() ?? '';
   }
 
   private async isEnglishLocale(): Promise<boolean> {
