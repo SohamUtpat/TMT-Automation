@@ -557,9 +557,20 @@ test("TC_AP_264 - Verify Listing Sort By Username Name Created On", async ({
   await verifyTextSort("Username", "userName");
   await verifyTextSort("Name", "name");
 
+  // Listing dates use en-GB DD/MM/YYYY; Date.parse treats slash dates as MM/DD/YYYY.
+  const parseListingDate = (value: string): number => {
+    const match = value.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (!match) return Number.NaN;
+    return new Date(
+      Number(match[3]),
+      Number(match[2]) - 1,
+      Number(match[1]),
+    ).getTime();
+  };
+
   await adminUsersPage.clickSort("Created On", "asc");
   const ascendingDates = await adminUsersPage.getColumnValues("createdOn");
-  const ascendingTimes = ascendingDates.map((value) => Date.parse(value));
+  const ascendingTimes = ascendingDates.map(parseListingDate);
   expect(ascendingTimes.every(Number.isFinite)).toBe(true);
   expect(ascendingTimes).toEqual(
     [...ascendingTimes].sort((left, right) => left - right),
@@ -568,7 +579,8 @@ test("TC_AP_264 - Verify Listing Sort By Username Name Created On", async ({
   await adminUsersPage.clickSort("Created On", "desc");
   const descendingTimes = (
     await adminUsersPage.getColumnValues("createdOn")
-  ).map((value) => Date.parse(value));
+  ).map(parseListingDate);
+  expect(descendingTimes.every(Number.isFinite)).toBe(true);
   expect(descendingTimes).toEqual(
     [...descendingTimes].sort((left, right) => right - left),
   );
