@@ -59,13 +59,13 @@ export class CategoriesPage {
 
   async navigateToCategories() {
     if (!this.isOnCategoriesListPage()) {
-      const listApi = this.waitForCategoryListResponse();
+      const listApi = this.waitForCategoryListResponse(30_000);
       await this.page.goto(CategoriesData.path, { waitUntil: 'commit', timeout: 120_000 });
       await listApi;
     }
     await this.ensureAuthenticated();
     if (!this.isOnCategoriesListPage()) {
-      const listApi = this.waitForCategoryListResponse();
+      const listApi = this.waitForCategoryListResponse(30_000);
       await this.page.goto(CategoriesData.path, { waitUntil: 'commit', timeout: 120_000 });
       await listApi;
     }
@@ -323,7 +323,7 @@ export class CategoriesPage {
     return total > CategoriesData.api.defaultSize;
   }
 
-  private waitForCategoryListResponse() {
+  private waitForCategoryListResponse(timeout = 5_000) {
     return this.page
       .waitForResponse(
         (resp) => {
@@ -332,31 +332,37 @@ export class CategoriesPage {
             resp.request().method() === 'GET' &&
             url.includes('/category') &&
             !url.includes('/category/create') &&
-            !url.includes('/category/update')
+            !url.includes('/category/update') &&
+            !url.includes('/category/delete')
           );
         },
-        { timeout: 30_000 },
+        { timeout },
       )
       .catch(() => undefined);
   }
 
   private async waitForTableLoaded() {
-    await this.page
-      .locator('.category-skeleton-row')
-      .first()
-      .waitFor({ state: 'hidden', timeout: 30_000 })
-      .catch(() => undefined);
+    const skeleton = this.page.locator('.category-skeleton-row').first();
+    if (await skeleton.isVisible().catch(() => false)) {
+      await skeleton.waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => undefined);
+    }
   }
 
   async searchCategories(query: string) {
-    if (!query) {
+    // Do not assert row visibility here — callers may search for missing/whitespace terms.
+    if (!query.trim()) {
       if ((await this.searchInput().inputValue()).trim() === '') {
         return;
       }
 
       const response = this.waitForCategoryListResponse();
-      await this.searchInput().fill('');
+      await this.searchInput().fill(query.trim() ? query : '');
       await response;
+      await this.waitForTableLoaded();
+      return;
+    }
+
+    if ((await this.searchInput().inputValue()).trim() === query) {
       await this.waitForTableLoaded();
       return;
     }
@@ -685,10 +691,11 @@ export class CategoriesPage {
   }
 
   async confirmDelete() {
+    const listRefresh = this.waitForCategoryListResponse();
     await this.deleteConfirmModal()
       .getByRole('button', { name: new RegExp(`^${CategoriesData.deleteModal.confirmButton}$`, 'i') })
       .click();
-    await this.waitForCategoryListResponse();
+    await listRefresh;
   }
 
   async cancelDelete() {

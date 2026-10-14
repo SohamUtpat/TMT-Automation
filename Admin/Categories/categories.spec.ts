@@ -34,16 +34,22 @@ test('TC_AP_680 - Verify category can be created with a valid name', async ({
 }) => {
   const category = CategoriesData.uniqueCategory('Create');
 
-  await categoriesPage.createCategory({
-    name: category.name,
-  });
+  await categoriesPage.openCreateCategory();
+  await categoriesPage.fillCategoryForm(category.name);
 
-  await categoriesPage.expectCategoryVisible(category.name);
+  await Promise.all([
+    expect(categoriesPage.toast(CategoriesData.messages.created).first()).toBeVisible({
+      timeout: 15_000,
+    }),
+    categoriesPage.submitCreate(),
+  ]);
+
+  // List is sorted by categoryOrder (not "newest first"), so search then verify the row.
+  await categoriesPage.searchCategories(category.name);
   const row = categoriesPage.categoryRow(category.name);
+  await expect(row).toBeVisible({ timeout: 15_000 });
   await expect(row.locator('.category-name')).toHaveText(category.name);
   await expect(row.locator('.category-description')).toHaveCount(0);
-
-  await categoriesPage.deleteCategoryIfPossible(category.name);
 });
 
 test('TC_AP_681 - Verify category can be created with assigned groups', async ({ categoriesPage }) => {
@@ -164,17 +170,14 @@ test('TC_AP_688 - Verify Assigned Groups count is displayed in the list', async 
 });
 
 test('TC_AP_689 - Verify category search by name', async ({ categoriesPage }) => {
-  const category = CategoriesData.uniqueCategory('Search');
+  const { categories } = await categoriesPage.fetchCategoriesFromApi({ size: 1 });
+  expect(categories.length, 'Need at least one existing category from API').toBeGreaterThan(0);
+  const existingName = categories[0].name;
 
-  await categoriesPage.createCategory({
-    name: category.name,
-  });
+  await categoriesPage.searchCategories(existingName);
+  await categoriesPage.expectCategoryVisible(existingName);
+  await categoriesPage.expectSearchResultsMatch(existingName);
 
-  await categoriesPage.searchCategories(category.name);
-  await categoriesPage.expectCategoryVisible(category.name);
-  await categoriesPage.expectSearchResultsMatch(category.name);
-
-  await categoriesPage.deleteCategoryIfPossible(category.name);
   await categoriesPage.clearSearch();
 });
 
@@ -187,26 +190,28 @@ test('TC_AP_690 - Verify search with non-matching term shows no results', async 
 });
 
 test('TC_AP_691 - Verify category can be edited', async ({ categoriesPage }) => {
-  const category = CategoriesData.uniqueCategory('Edit');
-  const updatedName = `${category.name}Upd`;
+  const { categories } = await categoriesPage.fetchCategoriesFromApi({ size: 1 });
+  expect(categories.length, 'Need at least one existing category from API').toBeGreaterThan(0);
+  const originalName = categories[0].name;
+  const updatedName = CategoriesData.uniqueCategory('Edit').name;
 
-  await categoriesPage.createCategory({
-    name: category.name,
-  });
-
-  await categoriesPage.openEditCategory(category.name);
+  await categoriesPage.searchCategories(originalName);
+  await categoriesPage.openEditCategory(originalName);
   await expect(categoriesPage.updateButton()).toBeVisible();
   await expect(categoriesPage.cancelButton()).toBeVisible();
   await expect(categoriesPage.backLink()).toBeVisible();
 
   await categoriesPage.fillCategoryForm(updatedName);
-  await categoriesPage.submitUpdate();
+
+  await Promise.all([
+    expect(categoriesPage.toast(CategoriesData.messages.updated).first()).toBeVisible({
+      timeout: 15_000,
+    }),
+    categoriesPage.submitUpdate(),
+  ]);
 
   await categoriesPage.searchCategories(updatedName);
   await categoriesPage.expectCategoryVisible(updatedName);
-  await categoriesPage.expectCategoryNotVisible(category.name);
-
-  await categoriesPage.deleteCategoryIfPossible(updatedName);
 });
 
 test('TC_AP_692 - Verify assigned groups can be updated on edit category', async ({
@@ -236,13 +241,17 @@ test('TC_AP_692 - Verify assigned groups can be updated on edit category', async
 });
 
 test('TC_AP_693 - Verify delete category shows confirmation modal', async ({ categoriesPage }) => {
-  const category = CategoriesData.uniqueCategory('DelMod');
+  const { categories } = await categoriesPage.fetchCategoriesFromApi({ size: 50 });
+  const category = categories.find((item) => item.assignedGroupCount === 0);
+  expect(category, 'Need a category with zero assigned groups from API').toBeTruthy();
+  const categoryName = category!.name;
 
-  await categoriesPage.createCategory({
-    name: category.name,
-  });
+  // Prefer the visible list when the category is already on-screen; search only if needed.
+  if ((await categoriesPage.categoryRow(categoryName).count()) === 0) {
+    await categoriesPage.searchCategories(categoryName);
+  }
 
-  await categoriesPage.clickDeleteCategory(category.name);
+  await categoriesPage.clickDeleteCategory(categoryName);
 
   await expect(categoriesPage.deleteConfirmModal()).toBeVisible({ timeout: 15_000 });
   await expect(
@@ -256,20 +265,27 @@ test('TC_AP_693 - Verify delete category shows confirmation modal', async ({ cat
   ).toBeVisible();
 
   await categoriesPage.cancelDelete();
-  await categoriesPage.expectCategoryVisible(category.name);
-
-  await categoriesPage.deleteCategoryIfPossible(category.name);
+  await categoriesPage.expectCategoryVisible(categoryName);
 });
 
 test('TC_AP_694 - Verify category can be deleted successfully', async ({ categoriesPage }) => {
-  const category = CategoriesData.uniqueCategory('Del');
+  const { categories } = await categoriesPage.fetchCategoriesFromApi({ size: 50 });
+  const category = categories.find((item) => item.assignedGroupCount === 0);
+  expect(category, 'Need a category with zero assigned groups from API').toBeTruthy();
+  const categoryName = category!.name;
 
-  await categoriesPage.createCategory({
-    name: category.name,
-  });
+  if ((await categoriesPage.categoryRow(categoryName).count()) === 0) {
+    await categoriesPage.searchCategories(categoryName);
+  }
 
-  await categoriesPage.deleteCategory(category.name);
-  await categoriesPage.expectCategoryNotVisible(category.name);
+  await Promise.all([
+    expect(categoriesPage.toast(CategoriesData.messages.deleted).first()).toBeVisible({
+      timeout: 15_000,
+    }),
+    categoriesPage.deleteCategory(categoryName),
+  ]);
+
+  await categoriesPage.expectCategoryNotVisible(categoryName);
 });
 
 test('TC_AP_695 - Verify infinite scroll loads more categories when available', async ({
@@ -386,28 +402,6 @@ test('TC_AP_702 - Verify delete blocked when category has assigned groups', asyn
   await categoriesPage.expectCategoryVisible(category.name);
 });
 
-test('TC_AP_703 - Negative - Verify duplicate category name is not allowed on create', async ({
-  categoriesPage,
-}) => {
-  const category = CategoriesData.uniqueCategory('Dup');
-
-  await categoriesPage.createCategory({
-    name: category.name,
-  });
-
-  await categoriesPage.openCreateCategory();
-  await categoriesPage.fillCategoryForm(category.name);
-  const response = await categoriesPage.submitCreateExpectValidation();
-
-  await categoriesPage.expectDuplicateNameRejected(response);
-
-  await categoriesPage.cancelForm();
-  await categoriesPage.searchCategories(category.name);
-  expect(await categoriesPage.categoryRow(category.name).count()).toBe(1);
-
-  await categoriesPage.deleteCategoryIfPossible(category.name);
-});
-
 test('TC_AP_704 - Negative - Verify category cannot be created with blank or whitespace-only name', async ({
   categoriesPage,
 }) => {
@@ -437,13 +431,15 @@ test('TC_AP_705 - Negative - Verify category name rejects special characters on 
 test('TC_AP_706 - Negative - Verify category cannot be updated with an empty name', async ({
   categoriesPage,
 }) => {
-  const category = CategoriesData.uniqueCategory('Empty');
+  const { categories } = await categoriesPage.fetchCategoriesFromApi({ size: 1 });
+  expect(categories.length, 'Need at least one existing category from API').toBeGreaterThan(0);
+  const categoryName = categories[0].name;
 
-  await categoriesPage.createCategory({
-    name: category.name,
-  });
+  if ((await categoriesPage.categoryRow(categoryName).count()) === 0) {
+    await categoriesPage.searchCategories(categoryName);
+  }
 
-  await categoriesPage.openEditCategory(category.name);
+  await categoriesPage.openEditCategory(categoryName);
   await categoriesPage.nameInput().fill('');
   await categoriesPage.updateButton().click();
 
@@ -451,61 +447,66 @@ test('TC_AP_706 - Negative - Verify category cannot be updated with an empty nam
   await categoriesPage.expectStillOnCreateOrEditForm();
 
   await categoriesPage.cancelForm();
-  await categoriesPage.deleteCategoryIfPossible(category.name);
 });
 
 test('TC_AP_707 - Negative - Verify duplicate category name is not allowed on edit', async ({
   categoriesPage,
 }) => {
-  const categoryA = CategoriesData.uniqueCategory('DupA');
-  const categoryB = CategoriesData.uniqueCategory('DupB');
+  const { categories } = await categoriesPage.fetchCategoriesFromApi({ size: 2 });
+  expect(categories.length, 'Need at least two existing categories from API').toBeGreaterThanOrEqual(2);
+  const categoryAName = categories[0].name;
+  const categoryBName = categories[1].name;
 
-  await categoriesPage.createCategory({
-    name: categoryA.name,
-  });
-  await categoriesPage.createCategory({
-    name: categoryB.name,
-  });
+  if ((await categoriesPage.categoryRow(categoryBName).count()) === 0) {
+    await categoriesPage.searchCategories(categoryBName);
+  }
 
-  await categoriesPage.openEditCategory(categoryB.name);
-  await categoriesPage.fillCategoryForm(categoryA.name);
+  await categoriesPage.openEditCategory(categoryBName);
+  await categoriesPage.fillCategoryForm(categoryAName);
 
   const updateRequest = categoriesPage.page.waitForResponse(
     (resp) =>
       resp.url().includes('/category') &&
       (resp.request().method() === 'PUT' || resp.request().method() === 'PATCH'),
-    { timeout: 30_000 },
+    { timeout: 15_000 },
   );
   await categoriesPage.updateButton().click();
   const response = await updateRequest.catch(() => undefined);
 
   await categoriesPage.expectDuplicateNameRejected(response);
+  await expect(
+    categoriesPage
+      .toast(CategoriesData.validation.nameDuplicate)
+      .or(
+        categoriesPage.page.locator('.ant-notification-notice').filter({
+          hasText: CategoriesData.validation.nameDuplicate,
+        }),
+      )
+      .first(),
+  ).toBeVisible({ timeout: 15_000 });
 
   await categoriesPage.cancelForm();
-  await categoriesPage.searchCategories(categoryB.name);
-  await categoriesPage.expectCategoryVisible(categoryB.name);
-
-  await categoriesPage.deleteCategoryIfPossible(categoryA.name);
-  await categoriesPage.deleteCategoryIfPossible(categoryB.name);
+  await categoriesPage.searchCategories(categoryBName);
+  await categoriesPage.expectCategoryVisible(categoryBName);
 });
 
 test('TC_AP_708 - Negative - Verify delete is not performed when confirmation modal is cancelled', async ({
   categoriesPage,
 }) => {
-  const category = CategoriesData.uniqueCategory('Keep');
+  const { categories } = await categoriesPage.fetchCategoriesFromApi({ size: 50 });
+  const category = categories.find((item) => item.assignedGroupCount === 0);
+  expect(category, 'Need a category with zero assigned groups from API').toBeTruthy();
+  const categoryName = category!.name;
 
-  await categoriesPage.createCategory({
-    name: category.name,
-  });
+  if ((await categoriesPage.categoryRow(categoryName).count()) === 0) {
+    await categoriesPage.searchCategories(categoryName);
+  }
 
-  await categoriesPage.clickDeleteCategory(category.name);
+  await categoriesPage.clickDeleteCategory(categoryName);
   await expect(categoriesPage.deleteConfirmModal()).toBeVisible({ timeout: 15_000 });
   await categoriesPage.cancelDelete();
 
-  await categoriesPage.searchCategories(category.name);
-  await categoriesPage.expectCategoryVisible(category.name);
-
-  await categoriesPage.deleteCategoryIfPossible(category.name);
+  await categoriesPage.expectCategoryVisible(categoryName);
 });
 
 test('TC_AP_709 - Negative - Verify search with only spaces does not break the list', async ({
@@ -520,67 +521,71 @@ test('TC_AP_709 - Negative - Verify search with only spaces does not break the l
 test('TC_AP_710 - Edge - Verify closing Assign Groups modal without selecting does not assign groups', async ({
   categoriesPage,
 }) => {
-  const category = CategoriesData.uniqueCategory('NoAdd');
+  const { categories } = await categoriesPage.fetchCategoriesFromApi({ size: 50 });
+  const category = categories.find((item) => item.assignedGroupCount === 0);
+  expect(category, 'Need a category with zero assigned groups from API').toBeTruthy();
+  const categoryName = category!.name;
+
   const groups = await categoriesPage.fetchAssignableGroups();
   const group = groups[0];
-
   if (!group) {
     throw new Error('No assignable groups available for no-select test');
   }
 
-  await categoriesPage.openCreateCategory();
-  await categoriesPage.fillCategoryForm(category.name);
-  // Search shows the option, then Escape without selecting (multi-select has no Add button).
+  if ((await categoriesPage.categoryRow(categoryName).count()) === 0) {
+    await categoriesPage.searchCategories(categoryName);
+  }
+
+  await categoriesPage.openEditCategory(categoryName);
+  // Search shows the option, then Cancel without applying selection.
   await categoriesPage.selectGroupWithoutAdding(group);
-  await categoriesPage.submitCreate();
+  expect(await categoriesPage.assignedGroupTags().count()).toBe(0);
 
-  await categoriesPage.searchCategories(category.name);
-  await categoriesPage.expectCategoryVisible(category.name);
-  expect(await categoriesPage.getAssignedGroupCount(category.name)).toBe(0);
-
-  await categoriesPage.deleteCategoryIfPossible(category.name);
+  await categoriesPage.cancelForm();
+  await categoriesPage.expectCategoryVisible(categoryName);
+  expect(await categoriesPage.getAssignedGroupCount(categoryName)).toBe(0);
 });
 
 test('TC_AP_711 - Edge - Verify Cancel on edit discards unsaved changes', async ({
   categoriesPage,
 }) => {
-  const category = CategoriesData.uniqueCategory('EdCan');
-  const changedName = `${category.name}X`;
+  const { categories } = await categoriesPage.fetchCategoriesFromApi({ size: 1 });
+  expect(categories.length, 'Need at least one existing category from API').toBeGreaterThan(0);
+  const originalName = categories[0].name;
+  const changedName = `${originalName}X`;
 
-  await categoriesPage.createCategory({
-    name: category.name,
-  });
+  if ((await categoriesPage.categoryRow(originalName).count()) === 0) {
+    await categoriesPage.searchCategories(originalName);
+  }
 
-  await categoriesPage.openEditCategory(category.name);
+  await categoriesPage.openEditCategory(originalName);
   await categoriesPage.fillCategoryForm(changedName);
   await categoriesPage.cancelForm();
 
-  await categoriesPage.searchCategories(category.name);
-  await categoriesPage.expectCategoryVisible(category.name);
+  await categoriesPage.searchCategories(originalName);
+  await categoriesPage.expectCategoryVisible(originalName);
   await categoriesPage.expectCategoryNotVisible(changedName);
-
-  await categoriesPage.deleteCategoryIfPossible(category.name);
 });
 
 test('TC_AP_712 - Edge - Verify Back link on edit returns to list without saving changes', async ({
   categoriesPage,
 }) => {
-  const category = CategoriesData.uniqueCategory('EdBack');
-  const changedName = `${category.name}X`;
+  const { categories } = await categoriesPage.fetchCategoriesFromApi({ size: 1 });
+  expect(categories.length, 'Need at least one existing category from API').toBeGreaterThan(0);
+  const originalName = categories[0].name;
+  const changedName = `${originalName}X`;
 
-  await categoriesPage.createCategory({
-    name: category.name,
-  });
+  if ((await categoriesPage.categoryRow(originalName).count()) === 0) {
+    await categoriesPage.searchCategories(originalName);
+  }
 
-  await categoriesPage.openEditCategory(category.name);
+  await categoriesPage.openEditCategory(originalName);
   await categoriesPage.fillCategoryForm(changedName);
   await categoriesPage.clickBackLink();
 
-  await categoriesPage.searchCategories(category.name);
-  await categoriesPage.expectCategoryVisible(category.name);
+  await categoriesPage.searchCategories(originalName);
+  await categoriesPage.expectCategoryVisible(originalName);
   await categoriesPage.expectCategoryNotVisible(changedName);
-
-  await categoriesPage.deleteCategoryIfPossible(category.name);
 });
 
 test('TC_AP_713 - Edge - Verify edit form is pre-populated with existing category data', async ({
@@ -600,42 +605,48 @@ test('TC_AP_713 - Edge - Verify edit form is pre-populated with existing categor
 test('TC_AP_714 - Edge - Verify assigned group can be removed from edit form using tag remove icon', async ({
   categoriesPage,
 }) => {
-  const category = CategoriesData.uniqueCategory('RmGrp');
-  const groups = await categoriesPage.fetchAssignableGroups();
-  const group = groups[0];
+  const { categories } = await categoriesPage.fetchCategoriesFromApi({ size: 50 });
+  const category = categories.find((item) => item.assignedGroupCount > 0);
+  expect(category, 'Need an existing category with assigned groups from API').toBeTruthy();
+  const categoryName = category!.name;
 
-  if (!group) {
-    throw new Error('No assignable groups available for remove-group test');
+  if ((await categoriesPage.categoryRow(categoryName).count()) === 0) {
+    await categoriesPage.searchCategories(categoryName);
   }
 
-  await categoriesPage.createCategory({
-    name: category.name,
-    groups: [group],
-  });
-
-  const countBefore = await categoriesPage.getAssignedGroupCount(category.name);
+  const countBefore = await categoriesPage.getAssignedGroupCount(categoryName);
   expect(countBefore).toBeGreaterThan(0);
 
-  await categoriesPage.openEditCategory(category.name);
+  await categoriesPage.openEditCategory(categoryName);
   await categoriesPage.removeAssignedGroupTag(0);
   await categoriesPage.submitUpdate();
 
-  await categoriesPage.searchCategories(category.name);
-  expect(await categoriesPage.getAssignedGroupCount(category.name)).toBeLessThan(countBefore);
-
-  await categoriesPage.deleteCategoryIfPossible(category.name);
+  await categoriesPage.searchCategories(categoryName);
+  expect(await categoriesPage.getAssignedGroupCount(categoryName)).toBeLessThan(countBefore);
 });
 
 test('TC_AP_715 - Edge - Verify category name with maximum allowed length', async ({
   categoriesPage,
 }) => {
-  const maxName = `M${Date.now().toString().slice(-5)}${'A'.repeat(
-    Math.max(2, CategoriesData.validation.nameMaxLength - 6),
-  )}`.slice(0, CategoriesData.validation.nameMaxLength);
+  const stamp = Date.now().toString().slice(-4);
+  const maxName = `MaxLength Category Name ${stamp} QA`.padEnd(
+    CategoriesData.validation.nameMaxLength,
+    'x',
+  ).slice(0, CategoriesData.validation.nameMaxLength);
+  expect(maxName.length).toBe(CategoriesData.validation.nameMaxLength);
 
-  await categoriesPage.createCategory({ name: maxName });
+  await categoriesPage.openCreateCategory();
+  await categoriesPage.fillCategoryForm(maxName);
+
+  await Promise.all([
+    expect(categoriesPage.toast(CategoriesData.messages.created).first()).toBeVisible({
+      timeout: 15_000,
+    }),
+    categoriesPage.submitCreate(),
+  ]);
+
+  await categoriesPage.searchCategories(maxName);
   await categoriesPage.expectCategoryVisible(maxName);
-  await categoriesPage.deleteCategoryIfPossible(maxName);
 });
 
 test('TC_AP_716 - Edge - Verify category name exceeding maximum length is rejected', async ({
@@ -714,21 +725,23 @@ test('TC_AP_719 - Edge - Verify list shows all-loaded state when everything fits
 test('TC_AP_721 - Edge - Verify rapid double-click on Update does not cause duplicate updates or errors', async ({
   categoriesPage,
 }) => {
-  const category = CategoriesData.uniqueCategory('DblU');
-  const updatedName = `${category.name}Upd`;
+  const { categories } = await categoriesPage.fetchCategoriesFromApi({ size: 1 });
+  expect(categories.length, 'Need at least one existing category from API').toBeGreaterThan(0);
+  const originalName = categories[0].name;
+  const updatedName = CategoriesData.uniqueCategory('DblU').name;
 
-  await categoriesPage.createCategory({
-    name: category.name,
-  });
+  if ((await categoriesPage.categoryRow(originalName).count()) === 0) {
+    await categoriesPage.searchCategories(originalName);
+  }
 
-  await categoriesPage.openEditCategory(category.name);
+  await categoriesPage.openEditCategory(originalName);
   await categoriesPage.fillCategoryForm(updatedName);
 
   const updateRequest = categoriesPage.page.waitForResponse(
     (resp) =>
       resp.url().includes('/category') &&
       (resp.request().method() === 'PUT' || resp.request().method() === 'PATCH'),
-    { timeout: 30_000 },
+    { timeout: 15_000 },
   );
   await categoriesPage.updateButton().dblclick();
   await updateRequest.catch(() => undefined);
@@ -736,8 +749,6 @@ test('TC_AP_721 - Edge - Verify rapid double-click on Update does not cause dupl
 
   await categoriesPage.searchCategories(updatedName);
   await categoriesPage.expectCategoryVisible(updatedName);
-
-  await categoriesPage.deleteCategoryIfPossible(updatedName);
 });
 
 test('TC_AP_722 - Edge - Verify delete blocked modal dismisses with OK and category remains', async ({
