@@ -29,11 +29,15 @@ export const SettingsData = {
     },
   },
 
-  supportFields: ['URL', 'Email', 'Contact Details', 'Language'] as const,
+  // Language moved to its own "User's Default Language" section on Settings.
+  supportFields: ['URL', 'Email', 'Contact Details'] as const,
+  languageFields: ['Languages'] as const,
 
   stamps: {
     api: { version: 2, page: 0, size: 25 },
     types: { standard: 0, approval: 1 },
+    // See All / upload flow is approval-only; Standard/Approval tabs were removed from the UI.
+    modalTitle: 'Approval Stamps',
     tabs: { standard: 'Standard Stamps', approval: 'Approval Stamps' },
   },
 

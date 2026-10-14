@@ -20,6 +20,18 @@ export const loginData = {
   mobilePassword: process.env.MOBILE_PASSWORD ?? 'mobilepassword',
 
   invalidCredentialsMessage: 'Invalid username or password',
+  // UMS also returns this for a known user + wrong password; FE may show it until rebuilt.
+  invalidCredentialsMessages: [
+    'Invalid username or password',
+    'Please provide the correct username or password.',
+  ],
   usernameRequiredMessage: 'Username is required',
   passwordRequiredMessage: 'Password is required',
+
+  // App product default is Japanese; login specs assert English copy.
+  // Must match frontend `LANGUAGE_STORAGE_KEY` / `ENG_LANG` (automation-only).
+  languageStorageKey: 'gulf_net_admin-language',
+  englishLanguageCode: 'eng',
+  englishLanguageButtonLabel: 'English',
+  englishUsernamePlaceholder: 'Enter Here',
 };

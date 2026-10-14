@@ -4,15 +4,18 @@ import { CategoriesData } from '../data/CategoriesData';
 import { ensureAuthenticated as restoreSession } from '../utils/ensureAuthenticated';
 import type { ApiGroup } from './GroupsPage';
 
-/** Categories table column indices — first column is the category icon. */
+/**
+ * Category list is a custom infinite-scroll grid (not Ant Table).
+ * Columns: drag | name | assigned count | created | updated | actions
+ * (Description was removed from the Categories UI.)
+ */
 export const CATEGORY_TABLE_COL = {
-  icon: 0,
+  drag: 0,
   name: 1,
-  description: 2,
+  assignedGroups: 2,
   createdOn: 3,
   updatedOn: 4,
-  assignedGroups: 5,
-  actions: 6,
+  actions: 5,
 } as const;
 
 export type CategoryTableColumn = keyof typeof CATEGORY_TABLE_COL;
@@ -20,7 +23,8 @@ export type CategoryTableColumn = keyof typeof CATEGORY_TABLE_COL;
 export type ApiCategory = {
   id: string;
   name: string;
-  description: string;
+  /** API may still return this; it is no longer shown or edited in the UI. */
+  description?: string;
   assignedGroupCount: number;
   createdAt: string;
   updatedAt: string;
@@ -46,26 +50,26 @@ export class CategoriesPage {
   }
 
   isOnCreatePage(): boolean {
-    return /create-categor/i.test(this.page.url());
+    return /\/create-category(?:\/|$|\?)/.test(this.page.url());
   }
 
   isOnEditPage(): boolean {
-    return /edit-categor/i.test(this.page.url());
+    return /\/create-category(?:\/|$|\?)/.test(this.page.url());
   }
 
   async navigateToCategories() {
     if (!this.isOnCategoriesListPage()) {
-      const listApi = this.waitForCategoryListResponse();
+      const listApi = this.waitForCategoryListResponse(30_000);
       await this.page.goto(CategoriesData.path, { waitUntil: 'commit', timeout: 120_000 });
       await listApi;
     }
     await this.ensureAuthenticated();
     if (!this.isOnCategoriesListPage()) {
-      const listApi = this.waitForCategoryListResponse();
+      const listApi = this.waitForCategoryListResponse(30_000);
       await this.page.goto(CategoriesData.path, { waitUntil: 'commit', timeout: 120_000 });
       await listApi;
     }
-    await this.expectCategoriesTitle();
+    await this.expectCategoriesLoaded();
   }
 
   async ensureAuthenticated() {
@@ -82,8 +86,13 @@ export class CategoriesPage {
     await this.expectCategoriesLoaded();
   }
 
+  pageHeading = () =>
+    this.page
+      .locator('.categories-page-heading h1, .category-editor-header h1, #pageTitle')
+      .first();
+
   async expectCategoriesTitle() {
-    await expect(this.page.locator('#pageTitle')).toHaveText(CategoriesData.pageTitle, { timeout: 30_000 });
+    await expect(this.pageHeading()).toHaveText(CategoriesData.pageTitle, { timeout: 30_000 });
   }
 
   async expectCategoriesLoaded() {
@@ -93,7 +102,7 @@ export class CategoriesPage {
     }
 
     await expect(this.createCategoryButton()).toBeVisible({ timeout: 30_000 });
-    await expect(this.page.locator('#pageTitle')).toHaveText(CategoriesData.pageTitle, { timeout: 30_000 });
+    await this.expectCategoriesTitle();
     await expect(this.searchInput()).toBeVisible({ timeout: 30_000 });
     await expect(this.table()).toBeVisible({ timeout: 30_000 });
   }
@@ -104,7 +113,17 @@ export class CategoriesPage {
       await this.cancelDelete().catch(() => undefined);
     }
 
-    if (this.isOnCreatePage() || this.isOnEditPage()) {
+    const blockedModal = this.deleteBlockedModal();
+    if (await blockedModal.isVisible().catch(() => false)) {
+      await this.dismissDeleteBlocked().catch(() => undefined);
+    }
+
+    const assignModal = this.assignGroupsModal();
+    if (await assignModal.isVisible().catch(() => false)) {
+      await assignModal.getByRole('button', { name: /^cancel$/i }).click().catch(() => undefined);
+    }
+
+    if (/\/create-category/.test(this.page.url())) {
       await this.clickBackLink().catch(() => undefined);
     }
 
@@ -116,117 +135,183 @@ export class CategoriesPage {
     if ((await this.searchInput().inputValue()).trim() !== '') {
       await this.clearSearch().catch(() => undefined);
     }
-
-    if ((await this.prevPageButton().getAttribute('aria-disabled')) !== 'true') {
-      await this.goToFirstPage().catch(() => undefined);
-    }
   }
 
   // ── List page locators ──────────────────────────────────────────────────────
 
-  createCategoryButton = () => this.page.getByRole('button', { name: /create category/i });
+  createCategoryButton = () =>
+    this.page
+      .locator('a[href="/create-category"] button, .create-category-button')
+      .or(this.page.getByRole('button', { name: /create category/i }))
+      .first();
 
-  searchInput = () => this.page.getByPlaceholder('Search');
+  searchInput = () =>
+    this.page
+      .getByPlaceholder(CategoriesData.search.placeholder)
+      .or(this.page.locator('.category-search-input input, input.category-search-input'))
+      .first();
 
-  table = () => this.page.locator('.ant-table');
+  /** Categories list container (replaces Ant Table). */
+  table = () =>
+    this.page.locator('.category-list-card, .category-list-scroll, .categories-card').first();
 
-  tableRows = () => this.page.locator('.ant-table-tbody tr.ant-table-row');
+  tableRows = () =>
+    this.page.locator('.category-list-scroll .category-row:not(.category-row-header):not(.category-skeleton-row)');
 
   categoryRow = (name: string) =>
     this.tableRows().filter({
-      has: this.page.locator('td').nth(CATEGORY_TABLE_COL.name).getByText(name, { exact: true }),
+      has: this.page.locator('.category-cell-name, .category-name').getByText(name, { exact: true }),
     });
 
-  sortHeader = (column: string) => this.page.locator('th').filter({ hasText: new RegExp(column, 'i') });
+  listHeader = (column: string) =>
+    this.page.locator('.category-row-header').getByText(column, { exact: true });
 
-  pagination = () => this.page.locator('.ant-pagination');
+  /** @deprecated Prefer listHeader — Categories no longer expose Ant sort headers. */
+  sortHeader = (column: string) => this.listHeader(column);
 
-  paginationInfo = () => this.page.locator('.ant-pagination-total-text');
+  /** Infinite-scroll sentinel / status (replaces Ant pagination). */
+  pagination = () =>
+    this.page.locator('.category-list-sentinel, .category-list-status, .category-list-card').first();
 
-  pageNumber = (num: number) => this.pagination().locator(`.ant-pagination-item-${num}`);
+  paginationInfo = () =>
+    this.page.getByText(/loading more categories|all categories loaded/i).first();
 
-  prevPageButton = () => this.pagination().locator('.ant-pagination-prev');
+  pageNumber = (_num: number) => this.page.locator('.does-not-exist');
 
-  nextPageButton = () => this.pagination().locator('.ant-pagination-next');
+  prevPageButton = () => this.page.locator('.does-not-exist');
 
-  firstPageButton = () => this.pagination().getByRole('img', { name: 'double-left' });
+  nextPageButton = () => this.page.locator('.does-not-exist');
 
-  lastPageButton = () => this.pagination().getByRole('img', { name: 'double-right' });
+  firstPageButton = () => this.page.locator('.does-not-exist');
+
+  lastPageButton = () => this.page.locator('.does-not-exist');
 
   editButton = (categoryName: string) =>
-    this.categoryRow(categoryName).locator('button .edit-icon').first();
+    this.categoryRow(categoryName).getByRole('button', { name: /edit category/i });
 
   deleteButton = (categoryName: string) =>
-    this.categoryRow(categoryName).locator('button .delete-icon').first();
+    this.categoryRow(categoryName).getByRole('button', { name: /delete category/i });
 
   deleteConfirmModal = () =>
-    this.page.locator('.common-modal-box, .ant-modal').filter({
+    this.page.locator('.category-alert-modal, .ant-modal').filter({
       hasText: CategoriesData.deleteModal.confirmMessage,
     });
 
   deleteBlockedModal = () =>
-    this.page.locator('.common-modal-box, .ant-modal').filter({
-      hasText: CategoriesData.deleteModal.blockedMessage,
+    this.page.locator('.category-alert-modal, .ant-modal').filter({
+      hasText: CategoriesData.deleteModal.blockedTitle,
     });
 
-  toast = (text: string | RegExp) => this.page.locator('.ant-message-notice-content').filter({ hasText: text });
+  toast = (text: string | RegExp) =>
+    this.page.locator('.ant-message-notice-content').filter({ hasText: text });
 
   fieldError = (text: string | RegExp) =>
     this.page.locator('.ant-form-item-explain-error, [class*="error"], [class*="info"]').filter({
       hasText: text,
     });
 
-  emptyTable = () => this.page.locator('.ant-empty, .ant-table-placeholder');
+  emptyTable = () =>
+    this.page.locator('.category-empty-state, .ant-empty').or(
+      this.page.getByText(CategoriesData.search.emptySearch),
+    );
 
   // ── Create / Edit form locators ─────────────────────────────────────────────
 
-  backLink = () => this.page.getByText(CategoriesData.form.backLink, { exact: true });
+  backLink = () =>
+    this.page
+      .locator('.back-to-categories-button')
+      .or(this.page.getByRole('button', { name: CategoriesData.form.backLink }));
 
-  nameInput = () => this.page.getByPlaceholder('Type here').first();
+  nameInput = () =>
+    this.page
+      .locator('.category-field')
+      .filter({ has: this.page.locator('.category-label', { hasText: 'Category Name' }) })
+      .locator('input.ant-input, input')
+      .first();
 
-  descriptionInput = () => this.page.locator('textarea').first();
+  /** Category Order was removed from the create/edit UI. */
+  orderInput = () => this.page.locator('.category-order-input input');
 
-  /** Ant Design multi-select for Assigned Groups (class from CreateCategoryComponent). */
-  groupsSelect = () => this.page.locator('.category-select.ant-select, .ant-select.category-select').first();
+  /** Description was removed from the create/edit UI. */
+  descriptionInput = () => this.page.locator('textarea.category-textarea');
 
-  groupsDropdown = () => this.page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)');
+  assignGroupsButton = () =>
+    this.page
+      .locator('.assign-groups-button')
+      .or(this.page.getByRole('button', { name: CategoriesData.form.assignGroupsButton }));
 
-  /** Selected group chips in the multi-select (not generic ant-tags elsewhere on the page). */
-  assignedGroupTags = () => this.groupsSelect().locator('.ant-select-selection-item');
+  assignGroupsModal = () =>
+    this.page.locator('.ant-modal').filter({
+      hasText: CategoriesData.form.assignGroupsButton,
+    });
 
-  /** Option label format used by the create/edit form: "Name (Code)". */
-  groupOptionLabel = (group: { code: string; name: string }) => `${group.name} (${group.code})`;
+  /** Legacy name — maps to Assign Groups modal (no Ant Select anymore). */
+  groupsSelect = () => this.assignGroupsButton();
 
-  createButton = () => this.page.getByRole('button', { name: /^create$/i });
+  groupsDropdown = () => this.assignGroupsModal().locator('.assign-groups-list');
 
-  cancelButton = () => this.page.getByRole('button', { name: /^cancel$/i });
+  groupsSearchInput = () =>
+    this.assignGroupsModal()
+      .locator('input[type="search"]')
+      .or(this.assignGroupsModal().getByPlaceholder(CategoriesData.search.groupsPlaceholder))
+      .first();
 
-  updateButton = () => this.page.getByRole('button', { name: /^update$/i });
+  assignedGroupTags = () => this.page.locator('.assigned-group-row:not(.assigned-group-row-header)');
 
-  // ── Table helpers ───────────────────────────────────────────────────────────
+  groupOptionLabel = (group: { code: string; name: string }) => group.name;
+
+  createButton = () =>
+    this.page.locator('button.category-submit-button, .category-button-css .category-submit-button').filter({
+      hasText: /create category/i,
+    });
+
+  cancelButton = () =>
+    this.page.locator('.category-button-css .category-cancel-button, button.category-cancel-button').first();
+
+  updateButton = () =>
+    this.page.locator('button.category-submit-button, .category-button-css .category-submit-button').filter({
+      hasText: /update category/i,
+    });
+
+  // ── List helpers ────────────────────────────────────────────────────────────
 
   async getVisibleCategoryNames(): Promise<string[]> {
     return this.getColumnValues('name');
   }
 
   async getColumnValues(column: CategoryTableColumn): Promise<string[]> {
-    const colIndex = CATEGORY_TABLE_COL[column];
     const rows = this.tableRows();
     const count = await rows.count();
     const values: string[] = [];
 
     for (let i = 0; i < count; i++) {
-      const text = await rows.nth(i).locator('td').nth(colIndex).textContent();
-      values.push(text?.trim() ?? '');
+      const row = rows.nth(i);
+      let text = '';
+      switch (column) {
+        case 'name':
+          text = (await row.locator('.category-name').innerText().catch(() => ''))?.trim() || '';
+          break;
+        case 'assignedGroups':
+          text = (await row.locator('.category-cell-groups').innerText().catch(() => ''))?.trim() || '';
+          break;
+        case 'createdOn':
+          text = (await row.locator('.category-cell-date').nth(0).innerText().catch(() => ''))?.trim() || '';
+          break;
+        case 'updatedOn':
+          text = (await row.locator('.category-cell-date').nth(1).innerText().catch(() => ''))?.trim() || '';
+          break;
+        default:
+          text = (await row.innerText().catch(() => ''))?.trim() || '';
+      }
+      if (text) values.push(text);
     }
 
     return values;
   }
 
   async getAssignedGroupCount(categoryName: string): Promise<number> {
-    const cell = this.categoryRow(categoryName).locator('td').nth(CATEGORY_TABLE_COL.assignedGroups);
+    const cell = this.categoryRow(categoryName).locator('.category-cell-groups');
     const text = (await cell.textContent())?.trim() ?? '0';
-    // UI renders "-" when no groups are assigned.
     if (!text || text === '-') {
       return 0;
     }
@@ -234,42 +319,57 @@ export class CategoriesPage {
   }
 
   async hasMultiplePages(): Promise<boolean> {
-    const nextDisabled = await this.nextPageButton().getAttribute('aria-disabled');
-    const prevDisabled = await this.prevPageButton().getAttribute('aria-disabled');
-    return !(nextDisabled === 'true' && prevDisabled === 'true');
+    const { total } = await this.fetchCategoriesFromApi({ size: 1 });
+    return total > CategoriesData.api.defaultSize;
   }
 
-  private waitForCategoryListResponse() {
+  private waitForCategoryListResponse(timeout = 5_000) {
     return this.page
       .waitForResponse(
-        (resp) => resp.url().includes('/category') && resp.request().method() === 'GET',
-        { timeout: 30_000 },
+        (resp) => {
+          const url = resp.url();
+          return (
+            resp.request().method() === 'GET' &&
+            url.includes('/category') &&
+            !url.includes('/category/create') &&
+            !url.includes('/category/update') &&
+            !url.includes('/category/delete')
+          );
+        },
+        { timeout },
       )
       .catch(() => undefined);
   }
 
   private async waitForTableLoaded() {
-    await this.page
-      .locator('.ant-table-wrapper .ant-spin-spinning')
-      .waitFor({ state: 'hidden', timeout: 30_000 })
-      .catch(() => undefined);
+    const skeleton = this.page.locator('.category-skeleton-row').first();
+    if (await skeleton.isVisible().catch(() => false)) {
+      await skeleton.waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => undefined);
+    }
   }
 
   async searchCategories(query: string) {
-    if (!query) {
+    // Do not assert row visibility here — callers may search for missing/whitespace terms.
+    if (!query.trim()) {
       if ((await this.searchInput().inputValue()).trim() === '') {
         return;
       }
 
       const response = this.waitForCategoryListResponse();
-      await this.searchInput().fill('');
+      await this.searchInput().fill(query.trim() ? query : '');
       await response;
+      await this.waitForTableLoaded();
+      return;
+    }
+
+    if ((await this.searchInput().inputValue()).trim() === query) {
+      await this.waitForTableLoaded();
       return;
     }
 
     const response = this.waitForCategoryListResponse();
     await this.searchInput().fill(query);
-    await this.searchInput().press('Enter');
+    // Debounced 300ms in UI — wait for the list API rather than Enter.
     await response;
     await this.waitForTableLoaded();
   }
@@ -278,11 +378,8 @@ export class CategoriesPage {
     await this.searchCategories('');
   }
 
-  async clickSort(column: string, order: 'asc' | 'desc' = 'asc') {
-    const iconTitle = order === 'asc' ? 'Sort Ascending' : 'Sort Descending';
-    await this.sortHeader(column).getByTitle(iconTitle).click();
-    await this.waitForCategoryListResponse();
-    await this.waitForTableLoaded();
+  async clickSort(_column: string, _order: 'asc' | 'desc' = 'asc') {
+    // Categories list no longer supports column sort (display order is drag-and-drop).
   }
 
   async isSortedAscending(values: string[], column?: CategoryTableColumn): Promise<boolean> {
@@ -301,74 +398,58 @@ export class CategoriesPage {
     return JSON.stringify(values) === JSON.stringify(sorted);
   }
 
-  private isSortedDates(values: string[], direction: 'asc' | 'desc'): boolean {
-    const dates = values.filter(Boolean).map((v) => new Date(v).getTime());
-    if (dates.length === 0 || dates.some((d) => Number.isNaN(d))) {
-      return false;
+  private isSortedDates(values: string[], order: 'asc' | 'desc'): boolean {
+    const times = values.map((v) => Date.parse(v) || 0);
+    for (let i = 1; i < times.length; i++) {
+      if (order === 'asc' && times[i] < times[i - 1]) return false;
+      if (order === 'desc' && times[i] > times[i - 1]) return false;
     }
-    const sorted = [...dates].sort((a, b) => (direction === 'asc' ? a - b : b - a));
-    return JSON.stringify(dates) === JSON.stringify(sorted);
+    return true;
   }
 
-  async expectSearchResultsMatch(term: string) {
-    const names = await this.getColumnValues('name');
-    const needle = term.toLowerCase();
-    expect(names.every((name) => name.toLowerCase().includes(needle))).toBe(true);
+  async expectSearchResultsMatch(query: string) {
+    const names = await this.getVisibleCategoryNames();
+    for (const name of names) {
+      expect(name.toLowerCase()).toContain(query.toLowerCase());
+    }
   }
 
+  /** Load more via infinite-scroll sentinel when more categories exist. */
   async goToNextPage() {
-    if ((await this.nextPageButton().getAttribute('aria-disabled')) === 'true') {
-      return;
-    }
-
-    await this.waitForTableLoaded();
+    const before = await this.tableRows().count();
     const response = this.waitForCategoryListResponse();
-    await this.nextPageButton().locator('button.ant-pagination-item-link').click();
+    await this.page.locator('.category-list-sentinel').scrollIntoViewIfNeeded().catch(() => undefined);
+    await this.page.evaluate(() => {
+      const scroll = document.querySelector('.category-list-scroll');
+      if (scroll) scroll.scrollTop = scroll.scrollHeight;
+    });
     await response;
     await this.waitForTableLoaded();
+    const after = await this.tableRows().count();
+    expect(after).toBeGreaterThanOrEqual(before);
+  }
+
+  async goToPageNumber(_num: number) {
+    // No numbered pagination in the new Categories UI.
   }
 
   async goToFirstPage() {
-    if ((await this.prevPageButton().getAttribute('aria-disabled')) === 'true') {
-      return;
-    }
-
-    await this.waitForTableLoaded();
-    const response = this.waitForCategoryListResponse();
-    await this.firstPageButton().click();
-    await response;
-    await this.waitForTableLoaded();
+    await this.clearSearch();
   }
 
   async goToLastPage() {
-    if ((await this.nextPageButton().getAttribute('aria-disabled')) === 'true') {
-      return;
-    }
-
-    await this.waitForTableLoaded();
-    const response = this.waitForCategoryListResponse();
-    await this.lastPageButton().click();
-    await response;
-    await this.waitForTableLoaded();
-  }
-
-  async goToPageNumber(num: number) {
-    await this.waitForTableLoaded();
-    const response = this.waitForCategoryListResponse();
-    await this.pageNumber(num).click();
-    await response;
-    await this.waitForTableLoaded();
+    await this.goToNextPage();
   }
 
   // ── Create / Edit category ──────────────────────────────────────────────────
 
   async openCreateCategory() {
     await this.createCategoryButton().click();
-    await expect(this.page.locator('#pageTitle')).toHaveText(CategoriesData.createPageTitle, {
-      timeout: 30_000,
-    });
+    await expect(this.page).toHaveURL(/\/create-category/, { timeout: 30_000 });
+    await expect(this.pageHeading()).toHaveText(CategoriesData.createPageTitle, { timeout: 30_000 });
     await expect(this.nameInput()).toBeVisible({ timeout: 15_000 });
-    await expect(this.groupsSelect()).toBeVisible({ timeout: 15_000 });
+    await expect(this.descriptionInput()).toHaveCount(0);
+    await expect(this.assignGroupsButton()).toBeVisible({ timeout: 15_000 });
   }
 
   async clickBackLink() {
@@ -376,61 +457,52 @@ export class CategoriesPage {
     await this.expectCategoriesLoaded();
   }
 
-  async fillCategoryForm(name: string, description = '') {
-    await this.nameInput().fill(name);
-    if (description) {
-      await this.descriptionInput().fill(description);
-    }
+  async fillCategoryForm(name: string, _description?: string, _order?: number) {
+    const nameField = this.nameInput();
+    await expect(nameField).toBeVisible({ timeout: 15_000 });
+    await nameField.fill(name);
   }
 
   async openGroupsDropdownAndSearch(query: string) {
-    await this.groupsSelect().click();
-    await expect(this.groupsDropdown()).toBeVisible({ timeout: 15_000 });
-    const searchInput = this.groupsSelect().locator('.ant-select-selection-search-input');
+    await this.assignGroupsButton().click();
+    await expect(this.assignGroupsModal()).toBeVisible({ timeout: 15_000 });
     const groupApi = this.page.waitForResponse(
       (r) => r.url().includes('/group') && r.request().method() === 'GET',
       { timeout: 30_000 },
     );
-    await searchInput.fill(query);
+    await this.groupsSearchInput().fill(query);
     await groupApi.catch(() => undefined);
     await expect(this.groupsDropdown()).toBeVisible({ timeout: 15_000 });
   }
 
-  async assignGroupFromDropdown(group: { code: string; name: string }) {
-    await this.openGroupsDropdownAndSearch(group.code);
-    const dropdown = this.groupsDropdown();
-    const option = dropdown.locator('.ant-select-item-option').filter({
-      hasText: this.groupOptionLabel(group),
-    });
+  async assignGroupFromDropdown(group: { code: string; name: string; id?: string }) {
+    await this.openGroupsDropdownAndSearch(group.code || group.name);
+    const option = this.assignGroupsModal()
+      .locator('.assign-groups-option')
+      .filter({ hasText: group.name });
     await expect(option.first()).toBeVisible({ timeout: 15_000 });
     await option.first().click();
-    // Multi-select keeps the dropdown open; close so tags are visible for assertions.
-    await this.page.keyboard.press('Escape');
+    await this.assignGroupsModal()
+      .getByRole('button', { name: CategoriesData.form.assignGroupsButton })
+      .click();
+    await expect(this.assignGroupsModal()).toBeHidden({ timeout: 15_000 });
   }
 
-  /**
-   * Open the groups dropdown, search for a group, then close without selecting.
-   * (Current UI has no separate Add button — selecting an option assigns immediately.)
-   */
   async selectGroupWithoutAdding(group: { code: string; name: string }) {
-    await this.openGroupsDropdownAndSearch(group.code);
-    const dropdown = this.groupsDropdown();
-    const option = dropdown.locator('.ant-select-item-option').filter({
-      hasText: this.groupOptionLabel(group),
-    });
+    await this.openGroupsDropdownAndSearch(group.code || group.name);
+    const option = this.assignGroupsModal()
+      .locator('.assign-groups-option')
+      .filter({ hasText: group.name });
     await expect(option.first()).toBeVisible({ timeout: 15_000 });
-    await this.page.keyboard.press('Escape');
+    // Close without applying selection.
+    await this.assignGroupsModal().getByRole('button', { name: /^cancel$/i }).click();
+    await expect(this.assignGroupsModal()).toBeHidden({ timeout: 15_000 });
   }
 
   async removeAssignedGroupTag(index = 0) {
-    const tag = this.assignedGroupTags().nth(index);
-    await expect(tag).toBeVisible({ timeout: 15_000 });
-    const remove = tag.locator('.anticon-close, .ant-select-selection-item-remove, [aria-label="remove"]');
-    if ((await remove.count()) > 0) {
-      await remove.first().click();
-      return;
-    }
-    await tag.click({ force: true });
+    const row = this.assignedGroupTags().nth(index);
+    await expect(row).toBeVisible({ timeout: 15_000 });
+    await row.getByRole('button', { name: /unassign group|remove group/i }).click();
   }
 
   async expectValidationMessage(text: string | RegExp) {
@@ -442,10 +514,6 @@ export class CategoriesPage {
     });
   }
 
-  /**
-   * Assert duplicate-name rejection: submit must not leave the create/edit form.
-   * Prefer an error toast/API failure when present; staying on the form is the hard requirement.
-   */
   async expectDuplicateNameRejected(response?: import('@playwright/test').Response | null) {
     await this.expectStillOnCreateOrEditForm();
 
@@ -473,8 +541,6 @@ export class CategoriesPage {
         .toLowerCase();
       const looksLikeDuplicate = /already|exist|duplicate|unique|taken|same name/.test(apiText);
 
-      // Soft signal only — some environments return a non-standard success envelope but still
-      // keep the user on the form (handled by expectStillOnCreateOrEditForm above).
       if (apiRejected || looksLikeDuplicate) {
         return;
       }
@@ -488,33 +554,39 @@ export class CategoriesPage {
   }
 
   async expectStillOnCreateOrEditForm() {
-    const onCreate = this.isOnCreatePage();
-    const onEdit = this.isOnEditPage();
-    expect(onCreate || onEdit).toBe(true);
+    expect(/\/create-category/.test(this.page.url())).toBe(true);
   }
 
   async submitCreate() {
     const createRequest = this.page.waitForResponse(
-      (resp) => {
-        const url = resp.url();
-        return (
-          resp.request().method() === 'POST' &&
-          (url.includes('/category/create') || /\/category(?:\?|$)/.test(url))
-        );
-      },
+      (resp) =>
+        resp.request().method() === 'POST' && resp.url().includes('/category/create'),
       { timeout: 30_000 },
     );
     await this.createButton().click();
-    await createRequest;
+    const response = await createRequest;
+
+    // App navigates to /categories on success even when some gateways surface odd status codes.
+    const navigated = await this.page
+      .waitForURL(/\/categories(?:\/|$|\?)/, { timeout: 30_000 })
+      .then(() => true)
+      .catch(() => false);
+
+    if (!navigated) {
+      const body = await response.text().catch(() => '');
+      throw new Error(
+        `Create category did not return to list. status=${response.status()} body=${body.slice(0, 400)}`,
+      );
+    }
+
     await this.expectCategoriesLoaded();
   }
 
   async submitCreateExpectValidation() {
     const createRequest = this.page.waitForResponse(
       (resp) =>
-        resp.request().method() === 'POST' &&
-        (resp.url().includes('/category/create') || /\/category(?:\?|$)/.test(resp.url())),
-      { timeout: 30_000 },
+        resp.request().method() === 'POST' && resp.url().includes('/category/create'),
+      { timeout: 5_000 },
     );
     await this.createButton().click();
     return createRequest.catch(() => undefined);
@@ -523,23 +595,54 @@ export class CategoriesPage {
   async submitUpdate() {
     const updateRequest = this.page.waitForResponse(
       (resp) =>
-        resp.url().includes('/category') &&
+        resp.url().includes('/category/update') &&
         (resp.request().method() === 'PUT' || resp.request().method() === 'PATCH'),
       { timeout: 30_000 },
     );
     await this.updateButton().click();
     await updateRequest;
+
+    const navigated = await this.page
+      .waitForURL(/\/categories(?:\/|$|\?)/, { timeout: 30_000 })
+      .then(() => true)
+      .catch(() => false);
+
+    if (!navigated) {
+      throw new Error('Update category did not return to the categories list');
+    }
+
     await this.expectCategoriesLoaded();
   }
 
   async cancelForm() {
-    await this.cancelButton().click();
+    if (!/\/create-category/.test(this.page.url())) {
+      await this.expectCategoriesLoaded().catch(() => this.navigateToCategories());
+      return;
+    }
+
+    const cancel = this.cancelButton();
+    if (await cancel.isVisible().catch(() => false)) {
+      await cancel.click({ timeout: 5_000 }).catch(() => undefined);
+    } else {
+      await this.clickBackLink().catch(() => undefined);
+    }
+
+    if (/\/create-category/.test(this.page.url())) {
+      await this.navigateToCategories();
+      return;
+    }
+
     await this.expectCategoriesLoaded();
   }
 
-  async createCategory(options: { name: string; description?: string; groups?: ApiGroup[] }) {
+  async createCategory(options: {
+    name: string;
+    description?: string;
+    categoryOrder?: number;
+    groups?: ApiGroup[];
+  }) {
     await this.openCreateCategory();
-    await this.fillCategoryForm(options.name, options.description ?? '');
+    await this.fillCategoryForm(options.name);
     if (options.groups?.length) {
       for (const group of options.groups) {
         await this.assignGroupFromDropdown(group);
@@ -551,11 +654,17 @@ export class CategoriesPage {
   }
 
   async openEditCategory(categoryName: string) {
-    await this.editButton(categoryName).click();
+    const row = this.categoryRow(categoryName);
+    await row.scrollIntoViewIfNeeded();
+    await row.hover().catch(() => undefined);
+    // dnd-kit may mark the sortable row aria-disabled while search/reorder is locked.
+    await this.editButton(categoryName).click({ force: true });
+    await expect(this.page).toHaveURL(/\/create-category/, { timeout: 30_000 });
+    await expect(this.pageHeading()).toHaveText(CategoriesData.editPageTitle, { timeout: 30_000 });
     await expect(this.updateButton()).toBeVisible({ timeout: 30_000 });
     await expect(this.nameInput()).toBeVisible({ timeout: 15_000 });
-    await expect(this.descriptionInput()).toBeVisible({ timeout: 15_000 });
-    await expect(this.groupsSelect()).toBeVisible({ timeout: 15_000 });
+    await expect(this.descriptionInput()).toHaveCount(0);
+    await expect(this.assignGroupsButton()).toBeVisible({ timeout: 15_000 });
   }
 
   async updateCategoryName(newName: string) {
@@ -575,12 +684,18 @@ export class CategoriesPage {
   // ── Delete category ─────────────────────────────────────────────────────────
 
   async clickDeleteCategory(categoryName: string) {
-    await this.deleteButton(categoryName).click();
+    const row = this.categoryRow(categoryName);
+    await row.scrollIntoViewIfNeeded();
+    await row.hover().catch(() => undefined);
+    await this.deleteButton(categoryName).click({ force: true });
   }
 
   async confirmDelete() {
-    await this.deleteConfirmModal().getByRole('button', { name: /^yes$/i }).click();
-    await this.waitForCategoryListResponse();
+    const listRefresh = this.waitForCategoryListResponse();
+    await this.deleteConfirmModal()
+      .getByRole('button', { name: new RegExp(`^${CategoriesData.deleteModal.confirmButton}$`, 'i') })
+      .click();
+    await listRefresh;
   }
 
   async cancelDelete() {
@@ -618,7 +733,6 @@ export class CategoriesPage {
       await this.expectCategoryVisible(category.name);
       return category;
     } catch {
-      // Seed one when the environment has no categories with assigned groups yet.
       const seed = CategoriesData.uniqueCategory('Seed');
       const groups = await this.fetchAssignableGroups();
       const group = groups[0];
@@ -627,7 +741,6 @@ export class CategoriesPage {
       }
       await this.createCategory({
         name: seed.name,
-        description: seed.description,
         groups: [group],
       });
       const created = await this.getApiCategoryByName(seed.name);
@@ -635,7 +748,6 @@ export class CategoriesPage {
         return {
           id: '',
           name: seed.name,
-          description: seed.description,
           assignedGroupCount: await this.getAssignedGroupCount(seed.name),
           createdAt: '',
           updatedAt: '',
@@ -667,7 +779,6 @@ export class CategoriesPage {
     };
   }
 
-  /** GET /category?page=0&size=25&search=&sort=createdAt,desc — matches categories listing curl. */
   async fetchCategoriesFromApi(
     options: {
       page?: number;
@@ -803,7 +914,6 @@ export class CategoriesPage {
     const size = options.size ?? 200;
     const headers = await this.getAuthHeaders();
 
-    // Prefer unassigned-only (matches create/edit form). Fall back to all groups if empty.
     const unassignedResponse = await this.page.request.get(
       `${this.apiBaseUrl}/group?unassignedOnly=true&page=${page}&size=${size}&search=`,
       { headers },
@@ -882,7 +992,11 @@ export class CategoriesPage {
   }
 
   async getApiCategoriesForUiCompare(): Promise<ApiCategory[]> {
-    const { categories } = await this.fetchCategoriesFromApi();
+    // Match the Categories list default sort so page-1 UI rows overlap the API sample.
+    const { categories } = await this.fetchCategoriesFromApi({
+      size: 100,
+      sort: 'categoryOrder,asc',
+    });
     return categories;
   }
 

@@ -7,22 +7,7 @@ export const DashboardData = {
     'Admins',
   ],
 
-  /** Current counts from GulfTMT dashboard (update if data changes). */
-  expectedCounts: {
-    mobileUsers: 261,
-    hqMembers: 238,
-    usersCanDelete: 37,
-    totalGroups: 24,
-    admins: 8,
-  },
-
   vennCategories: ['Mobile App Users', 'HQ Members', 'Users Can Delete', 'Regular Users'],
-
-  vennCounts: {
-    mobileUsers: 261,
-    hqMembers: 238,
-    usersCanDelete: 37,
-  },
 
   graphAxisLabels: {
     x: 'Group Name',
@@ -33,16 +18,20 @@ export const DashboardData = {
 
   barGraphFields: ['Regular Users', 'Users Can Delete', 'HQ Members'],
 
-  /** Known groups visible on the bar chart. */
+  /** Known groups visible on the bar chart (smoke reference only). */
   sampleGroups: ['test-100', 'Dev Group', 'HQ Group', 'JOSH Group'],
 
   /**
-   * Group with zero users — should not appear on graph (TC_AP_288).
-   * Update if you know the exact empty group name in your environment.
+   * Fallback empty-group name for TC_AP_288 when the API returns no zero-user groups.
+   * Prefer `getApiEmptyGroupNames()` so the assertion tracks live data.
    */
   emptyGroupName: 'EmptyGroupWithZeroUsers',
 
   mobileUsersPagePath: '/mobile-users',
-  /** Table pagination format: "1-25 of 261 items" (see TableView showTotal). */
-  mobileUsersPaginationPattern: /of\s*261\s*items/i,
+
+  /** Build pagination matcher from live Mobile App Users API count (TC_AP_286). */
+  mobileUsersPaginationPattern(count: number): RegExp {
+    const escaped = String(count).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`of\\s*${escaped}\\s*items`, 'i');
+  },
 };

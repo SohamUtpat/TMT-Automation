@@ -2,6 +2,7 @@ import { expect, type Locator, type Page } from "@playwright/test";
 import path from "path";
 import { getApiBaseUrl } from "../config/appConfig";
 import { AdminUsersData } from "../data/AdminUsersData";
+import { adminPageTitle } from "../utils/adminPageTitle";
 import {
   ensureAuthenticated as restoreSession,
   isOnLoginPage,
@@ -112,8 +113,7 @@ export class AdminUsersPage {
     }
 
     const [title, createVisible] = await Promise.all([
-      this.page
-        .locator("#pageTitle")
+      adminPageTitle(this.page)
         .textContent()
         .catch(() => ""),
       this.createUserLink()
@@ -260,7 +260,7 @@ export class AdminUsersPage {
       }
     }
 
-    await expect(this.page.locator("#pageTitle")).toHaveText(
+    await expect(adminPageTitle(this.page)).toHaveText(
       AdminUsersData.pageTitle,
       {
         timeout: 90_000,
@@ -367,7 +367,7 @@ export class AdminUsersPage {
   fieldError = (text: string | RegExp) =>
     this.page
       .locator(
-        '[class*="textInput-module__info"], [class*="info"].error, .admin-text-labels .error',
+        '[class*="textInput-module__info"], [class*="info"].error, .admin-text-labels .error, .phone-input-error-text',
       )
       .filter({
         hasText: text,

@@ -1,5 +1,6 @@
 import { test, expect } from '../fixtures/forms.fixture';
 import { FormsData } from '../data/FormsData';
+import { adminPageTitle } from '../utils/adminPageTitle';
 
 test('TC_AP_307 - Verify Forms page loads successfully', async ({ formsPage }) => {
   await expect(formsPage.page).toHaveURL(new RegExp(`${FormsData.path}$`));
@@ -7,7 +8,7 @@ test('TC_AP_307 - Verify Forms page loads successfully', async ({ formsPage }) =
 });
 
 test('TC_AP_308 - Verify UI elements on Form page', async ({ formsPage }) => {
-  await expect(formsPage.page.locator('#pageTitle')).toHaveText(FormsData.pageTitle);
+  await expect(adminPageTitle(formsPage.page)).toHaveText(FormsData.pageTitle);
   await expect(formsPage.searchInput()).toBeVisible();
   await expect(formsPage.table()).toBeVisible();
   await expect(formsPage.formBuilderButton()).toBeVisible();
@@ -26,7 +27,7 @@ test('TC_AP_309 - Verify that latest form appear first on the row', async ({ for
 
 test('TC_AP_310 - Verify Form name and Description Truncation (Ellipsis)', async ({ formsPage }) => {
   const rowCount = await formsPage.tableRows().count();
-  test.skip(rowCount === 0, 'No forms available to verify ellipsis');
+  expect(rowCount, 'No forms available to verify ellipsis').toBeGreaterThan(0);
 
   await formsPage.expectCellEllipsis('name', 0);
   await formsPage.expectCellEllipsis('description', 0);
@@ -79,7 +80,7 @@ test('TC_AP_317 - Verify pagination works when forms exceed page limit', async (
 
 test('TC_AP_318 - Verify the table hovering effect when hover over each row', async ({ formsPage }) => {
   const rowCount = await formsPage.tableRows().count();
-  test.skip(rowCount === 0, 'No forms available to verify row hover');
+  expect(rowCount, 'No forms available to verify row hover').toBeGreaterThan(0);
 
   await formsPage.expectRowHoverHighlight(0);
 });
@@ -166,7 +167,7 @@ test('TC_AP_327 - Verify that when the group is selected it should appear in the
 
   const selectedTag = formsPage.assignSelectedGroupTag(groupLabel);
   await expect(selectedTag).toBeVisible();
-  await expect(selectedTag.locator('.anticon-close')).toBeVisible();
+  await expect(selectedTag.getByRole("button")).toBeVisible();
 });
 
 test('TC_AP_328 - Verify removing a selected group', async ({ formsPage }) => {

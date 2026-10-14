@@ -80,14 +80,6 @@ test('TC_AP_91 - Verify Contact Details Are Updated', async ({ settingsPage, set
   await settingsPage.expectDisplayedSupportField(/Contact/i, update.contact);
 });
 
-// TC_AP_92 - Verify URL Maximum Length 50
-// Invalid test case — URL length limit not enforced in settings form.
-// test.skip('TC_AP_92 - Verify URL Maximum Length 50', async () => {});
-
-// TC_AP_93 - Verify URL Over 50 Shows Validation
-// Invalid test case — URL length limit not enforced in settings form.
-// test.skip('TC_AP_93 - Verify URL Over 50 Shows Validation', async () => {});
-
 test('TC_AP_94 - Verify Only Valid URL Format Accepted', async ({ settingsPage }) => {
   await settingsPage.openSupportDetailsEdit();
   await settingsPage.fillSupportForm({ url: 'not-a-valid-url' });
@@ -135,11 +127,13 @@ test('TC_AP_98 - Verify Invalid Data Cannot Be Saved', async ({ settingsPage }) 
 
 test('TC_AP_99 - Verify Support And Stamp Fields On Settings Page', async ({ settingsPage }) => {
   const apiSettings = await settingsPage.fetchSettingsFromApi();
-  const { total: standardTotal } = await settingsPage.fetchStandardStampsFromApi();
   const { total: approvalTotal } = await settingsPage.fetchApprovalStampsFromApi();
 
   for (const field of SettingsData.supportFields) {
     await expect(settingsPage.supportDetailsSection().getByText(field, { exact: false })).toBeVisible();
+  }
+  for (const field of SettingsData.languageFields) {
+    await expect(settingsPage.defaultLanguageSection().getByText(field, { exact: false })).toBeVisible();
   }
   expect(apiSettings.url).toBeTruthy();
   expect(apiSettings.email).toBeTruthy();
@@ -147,40 +141,38 @@ test('TC_AP_99 - Verify Support And Stamp Fields On Settings Page', async ({ set
   await expect(settingsPage.stampsSection()).toBeVisible();
   await expect(settingsPage.seeAllStampsButton()).toBeVisible();
   await expect(settingsPage.uploadNewStampButton()).toBeVisible();
-  expect(standardTotal).toBeGreaterThanOrEqual(0);
   expect(approvalTotal).toBeGreaterThanOrEqual(0);
 
   await settingsPage.openSeeAllStamps();
-  await expect(settingsPage.settingsModal().getByText(SettingsData.stamps.tabs.standard)).toBeVisible();
-  await expect(settingsPage.settingsModal().getByText(SettingsData.stamps.tabs.approval)).toBeVisible();
+  await expect(settingsPage.settingsModal().getByText(SettingsData.stamps.modalTitle)).toBeVisible();
   await settingsPage.closeModal();
 });
 
 test('TC_AP_100 - Verify Stamps Can Be Viewed', async ({ settingsPage }) => {
-  const { stamps: standardStamps } = await settingsPage.fetchStandardStampsFromApi();
-  test.skip(standardStamps.length === 0, 'No standard stamps returned from API');
+  const { stamps: approvalStamps } = await settingsPage.fetchApprovalStampsFromApi();
+  expect(approvalStamps.length, 'No approval stamps returned from API').toBeGreaterThan(0);
 
   await expect(settingsPage.stampPreviewImages().first()).toBeVisible({ timeout: 30_000 });
 
-  await settingsPage.openSeeAllStamps({ tab: 'standard' });
+  await settingsPage.openSeeAllStamps();
   expect(await settingsPage.stampImagesInModal().count()).toBeGreaterThan(0);
   await settingsPage.closeModal();
 });
 
 test('TC_AP_101 - Verify Stamp Can Be Deleted', async ({ settingsPage }) => {
-  const { stamps } = await settingsPage.fetchStandardStampsFromApi();
-  test.skip(stamps.length === 0, 'No standard stamps available from API to delete');
+  const { stamps } = await settingsPage.fetchApprovalStampsFromApi();
+  expect(stamps.length, 'No approval stamps available from API to delete').toBeGreaterThan(0);
 
-  await settingsPage.openSeeAllStamps({ tab: 'standard' });
+  await settingsPage.openSeeAllStamps();
   await settingsPage.deleteFirstStampInModal();
   await settingsPage.closeModal();
 });
 
 test('TC_AP_102 - Verify Message After Stamp Deletion', async ({ settingsPage }) => {
-  const { stamps } = await settingsPage.fetchStandardStampsFromApi();
-  test.skip(stamps.length === 0, 'No standard stamps available from API to delete');
+  const { stamps } = await settingsPage.fetchApprovalStampsFromApi();
+  expect(stamps.length, 'No approval stamps available from API to delete').toBeGreaterThan(0);
 
-  await settingsPage.openSeeAllStamps({ tab: 'standard' });
+  await settingsPage.openSeeAllStamps();
   await settingsPage.deleteFirstStampInModal();
   await expect(settingsPage.toast(SettingsData.messages.stampDeleted)).toBeVisible();
   await settingsPage.closeModal();
@@ -223,14 +215,6 @@ test('TC_AP_107 - Verify More Than 50 Stamps Cannot Upload At Once', async ({ se
   await settingsPage.closeModal();
 });
 
-// TC_AP_108 - Verify Deleted Stamp Visible In Chat To End User
-// Invalid / out of scope — requires mobile chat verification.
-// test.skip('TC_AP_108 - Verify Deleted Stamp Visible In Chat To End User', async () => {});
-
-// TC_AP_109 - Verify Maximum 100 Stamps In System
-// Invalid test case — total stamp cap cannot be reliably exercised in UI automation.
-// test.skip('TC_AP_109 - Verify Maximum 100 Stamps In System', async () => {});
-
 test('TC_AP_110 - Verify User Can Add Stamp', async ({ settingsPage }) => {
   await settingsPage.openUploadStamps();
   await settingsPage.uploadStampFiles([SettingsData.testAssets.validStamp]);
@@ -247,18 +231,14 @@ test('TC_AP_111 - Verify User Can Add Multiple Stamps', async ({ settingsPage })
 });
 
 test('TC_AP_112 - Verify Stamps Visible In See All View', async ({ settingsPage }) => {
-  const { stamps } = await settingsPage.fetchStandardStampsFromApi();
-  test.skip(stamps.length === 0, 'No standard stamps returned from API');
+  const { stamps } = await settingsPage.fetchApprovalStampsFromApi();
+  expect(stamps.length, 'No approval stamps returned from API').toBeGreaterThan(0);
 
-  await settingsPage.openSeeAllStamps({ tab: 'standard' });
+  await settingsPage.openSeeAllStamps();
   await expect(settingsPage.stampImagesInModal().first()).toBeVisible({ timeout: 30_000 });
   await expect(settingsPage.stampDeleteIcons().first()).toBeVisible();
   await settingsPage.closeModal();
 });
-
-// TC_AP_113 - Verify Stamps Visible On Mobile App
-// Requires GulfTMT mobile application — out of admin portal automation scope.
-// test.skip('TC_AP_113 - Verify Stamps Visible On Mobile App', async () => {});
 
 test('TC_AP_114 - Verify Language Preference Can Be Set', async ({ settingsPage }) => {
   await settingsPage.selectLanguageInEditModal(SettingsData.languages.thai.label);

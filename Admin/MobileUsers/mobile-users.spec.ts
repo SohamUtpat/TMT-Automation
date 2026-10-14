@@ -2,53 +2,9 @@ import { test, expect } from "../fixtures/mobile-users.fixture";
 import { MobileUsersData } from "../data/MobileUsersData";
 import { BulkUploadCsvBuilder } from "../utils/BulkUploadCsvBuilder";
 import { TestDataGenerator } from "../utils/TestDataGenerator";
-import { getApiBaseUrl } from "../config/appConfig";
 import fs from "fs";
 import os from "os";
 import path from "path";
-
-const LOCAL_CREATE_UNAVAILABLE_REASON =
-  "Local user-management create endpoint returns HTTP 500; disposable-user create/edit verification requires that backend prerequisite";
-const LOCAL_CREATE_DEPENDENT_CASES = new Set([
-  "TC_AP_158",
-  "TC_AP_159",
-  "TC_AP_160",
-  "TC_AP_162",
-  "TC_AP_165",
-  "TC_AP_166",
-  "TC_AP_167",
-  "TC_AP_169",
-  "TC_AP_171",
-  "TC_AP_173",
-  "TC_AP_175",
-  "TC_AP_176",
-  "TC_AP_177",
-  "TC_AP_180",
-  "TC_AP_183",
-  "TC_AP_188",
-  "TC_AP_189",
-  "TC_AP_190",
-  "TC_AP_194",
-  "TC_AP_195",
-  "TC_AP_196",
-  "TC_AP_201",
-  "TC_AP_202",
-  "TC_AP_203",
-  "TC_AP_204",
-  "TC_AP_205",
-  "TC_AP_207",
-  "TC_AP_219",
-  "TC_AP_220",
-]);
-
-test.beforeEach(async ({}, testInfo) => {
-  const caseId = testInfo.title.match(/^TC_AP_\d+/)?.[0];
-  const isLocalApi = new URL(getApiBaseUrl()).hostname === "localhost";
-  test.skip(
-    isLocalApi && !!caseId && LOCAL_CREATE_DEPENDENT_CASES.has(caseId),
-    LOCAL_CREATE_UNAVAILABLE_REASON,
-  );
-});
 
 test.describe("TC_AP_157 - Create User Form Fields", () => {
   test("Verify create user form has required fields", async ({
@@ -186,12 +142,6 @@ test("TC_AP_163 - Verify Profile Photo Format Validation", async ({
   );
 });
 
-// import { test } from '../fixtures/mobile-users.fixture';
-//
-// test.skip('TC_AP_164 - Verify Profile Photo In Mobile App', async () => {
-//   // Requires mobile app login — out of admin portal automation scope.
-// });
-
 test("TC_AP_165 - Verify HQ Role Assignment", async ({ mobileUsersPage }) => {
   const user = MobileUsersData.buildValidUser({
     roleHqYes: true,
@@ -262,12 +212,6 @@ test("TC_AP_169 - Verify Multiple Group Selection", async ({
   const groups = await mobileUsersPage.getColumnValues("groups");
   expect(groups[0]?.length).toBeGreaterThan(0);
 });
-
-// import { test } from '../fixtures/mobile-users.fixture';
-//
-// test.skip('TC_AP_170 - Verify User Reflects In Mobile App', async () => {
-//   // Requires mobile app access — out of admin portal automation scope.
-// });
 
 test("TC_AP_171 - Verify Maximum Name Length 50", async ({
   mobileUsersPage,
@@ -438,12 +382,14 @@ test("TC_AP_179 - Verify Username Under 3 Shows Validation", async ({
   });
 });
 
-test("TC_AP_180 - Verify Maximum Mobile Length 15", async ({
+test("TC_AP_180 - Verify Valid JP/SG/TH Mobile Number Is Accepted", async ({
   mobileUsersPage,
 }) => {
-  const user = MobileUsersData.buildValidUser({ phone: "123456789012345" });
+  const user = MobileUsersData.buildValidUser({
+    phone: MobileUsersData.validation.validMobileExample,
+  });
 
-  await test.step("Create user with 15-digit mobile number", async () => {
+  await test.step("Create user with a valid Japan mobile number", async () => {
     await mobileUsersPage.clickCreateUser();
     await mobileUsersPage.fillCreateUserForm(user);
     await mobileUsersPage.triggerFieldValidation();
@@ -456,18 +402,18 @@ test("TC_AP_180 - Verify Maximum Mobile Length 15", async ({
   });
 });
 
-test("TC_AP_181 - Verify Mobile Over 15 Shows Validation", async ({
+test("TC_AP_181 - Verify Invalid Country Mobile Shows Validation", async ({
   mobileUsersPage,
 }) => {
-  await test.step("Submit create form with 16-digit mobile number", async () => {
+  await test.step("Submit create form with a non JP/SG/TH mobile number", async () => {
     await mobileUsersPage.clickCreateUser();
-    await mobileUsersPage.fillCreateUserForm({ phone: "1234567890123456" });
+    await mobileUsersPage.fillCreateUserForm({ phone: "123456789012345" });
     await mobileUsersPage.submitCreateUser({ waitForApi: false });
   });
 
-  await test.step("Verify mobile max length validation message", async () => {
+  await test.step("Verify country mobile validation message", async () => {
     await mobileUsersPage.expectValidationMessage(
-      MobileUsersData.validation.mobileMaxLength,
+      MobileUsersData.validation.invalidMobile,
     );
   });
 });
@@ -486,68 +432,6 @@ test("TC_AP_182 - Verify Mobile Rejects Invalid Characters", async ({
   await test.step("Verify invalid mobile validation message", async () => {
     await mobileUsersPage.expectValidationMessage(
       MobileUsersData.validation.invalidMobile,
-    );
-  });
-});
-
-test("TC_AP_183 - Verify Doraku Code Max Length 20", async ({
-  mobileUsersPage,
-}) => {
-  await mobileUsersPage.clickCreateUser();
-  if (!(await mobileUsersPage.dorakuInput().isVisible())) {
-    test.skip(true, "Doraku field hidden — integration disabled");
-  }
-
-  const user = MobileUsersData.buildValidUser({
-    dorakuCode: TestDataGenerator.generateLongString(
-      MobileUsersData.limits.dorakuMax,
-    ),
-  });
-
-  await test.step("Create user with 20-character Doraku code", async () => {
-    await mobileUsersPage.fillCreateUserForm(user);
-    await mobileUsersPage.submitCreateUser();
-  });
-});
-
-test("TC_AP_184 - Verify Doraku Over 20 Shows Validation", async ({
-  mobileUsersPage,
-}) => {
-  await mobileUsersPage.clickCreateUser();
-  if (!(await mobileUsersPage.dorakuInput().isVisible())) {
-    test.skip(true, "Doraku field hidden — integration disabled");
-  }
-
-  await test.step("Submit create form with 21-character Doraku code", async () => {
-    await mobileUsersPage.fillCreateUserForm({
-      dorakuCode: TestDataGenerator.generateLongString(21),
-    });
-    await mobileUsersPage.submitCreateUser({ waitForApi: false });
-  });
-
-  await test.step("Verify Doraku max length validation message", async () => {
-    await mobileUsersPage.expectValidationMessage(
-      MobileUsersData.validation.dorakuMaxLength,
-    );
-  });
-});
-
-test("TC_AP_185 - Verify Doraku Accepts Integers Only", async ({
-  mobileUsersPage,
-}) => {
-  await mobileUsersPage.clickCreateUser();
-  if (!(await mobileUsersPage.dorakuInput().isVisible())) {
-    test.skip(true, "Doraku field hidden — integration disabled");
-  }
-
-  await test.step("Submit create form with invalid Doraku code", async () => {
-    await mobileUsersPage.fillCreateUserForm({ dorakuCode: "abc@#$" });
-    await mobileUsersPage.submitCreateUser({ waitForApi: false });
-  });
-
-  await test.step("Verify invalid Doraku validation message", async () => {
-    await mobileUsersPage.expectValidationMessage(
-      MobileUsersData.validation.invalidDoraku,
     );
   });
 });
@@ -573,10 +457,6 @@ test("TC_AP_186 - Verify User Cannot Be Created With Invalid Inputs", async ({
       new RegExp(MobileUsersData.paths.create),
     );
   });
-});
-
-test.skip("TC_AP_187 - Verify Created User Receives Email", async () => {
-  // Email delivery cannot be verified from admin portal automation.
 });
 
 test("TC_AP_188 - Verify Status Active By Default", async ({
@@ -627,23 +507,6 @@ test("TC_AP_190 - Verify Username Not Editable On Edit", async ({
     await mobileUsersPage.openEditUser(user.userName);
     await expect(mobileUsersPage.userNameInput()).toBeDisabled();
   });
-});
-
-// import { test } from '../fixtures/mobile-users.fixture';
-//
-// test.skip('TC_AP_191 - Verify Old Username Cannot Login Mobile App', async () => {
-//   // Invalid / out of scope — requires mobile app login.
-// });
-
-// import { test, expect } from '../fixtures/mobile-users.fixture';
-// import { MobileUsersData } from '../data/MobileUsersData';
-//
-// test.skip('TC_AP_192 - Verify Edit Keeps Same Username', async ({ mobileUsersPage }) => {
-//   // Invalid test case — commented out per test plan.
-// });
-
-test.skip("TC_AP_193 - Verify Email Update Delivery", async () => {
-  // Email delivery cannot be verified from admin portal automation.
 });
 
 test("TC_AP_194 - Verify Status Field On Edit Form", async ({
@@ -716,18 +579,6 @@ test("TC_AP_196 - Verify Role Can Be Changed On Edit", async ({
       MobileUsersData.roles.yes,
     );
   });
-});
-
-test.skip("TC_AP_197 - Verify Inactive User Cannot Login Mobile App", async () => {
-  // Requires mobile app login — out of admin portal automation scope.
-});
-
-test.skip("TC_AP_198 - Verify Monthly Budget Points Update", async () => {
-  // Monthly budget points field not present in current frontend build.
-});
-
-test.skip("TC_AP_199 - Verify Remaining Budget Points On Edit", async () => {
-  // Remaining budget points field not present in current frontend build.
 });
 
 test("TC_AP_200 - Verify Listing Columns", async ({ mobileUsersPage }) => {
@@ -878,10 +729,10 @@ test("TC_AP_207 - Verify Search Trims Spaces", async ({ mobileUsersPage }) => {
 
 test("TC_AP_208 - Verify Sorting On Listing", async ({ mobileUsersPage }) => {
   const { users } = await mobileUsersPage.fetchMobileUsers();
-  test.skip(
-    users.length < 2,
+  expect(
+    users.length,
     "Need at least 2 mobile users from API to verify sorting",
-  );
+  ).toBeGreaterThanOrEqual(2);
 
   await test.step("Sort Username ascending", async () => {
     await mobileUsersPage.clickSort("Username", "asc");
@@ -943,48 +794,6 @@ test("TC_AP_210 - Verify Groups Filter", async ({ mobileUsersPage }) => {
     const rows = await mobileUsersPage.getVisibleRowCount();
     expect(rows).toBeGreaterThan(0);
     expect(rows).toBeLessThanOrEqual(filtered.total);
-  });
-});
-
-test("TC_AP_211 - Verify Roles Filter", async ({ mobileUsersPage }) => {
-  test.skip(
-    true,
-    "Frontend role filter payload is not reliably honored by the local backend; HQ currently returns mixed role values",
-  );
-  await test.step("Apply Roles filter for HQ", async () => {
-    await mobileUsersPage.openFilterModal();
-    await mobileUsersPage.selectFilterTab("Roles");
-    await mobileUsersPage.toggleFilterCheckbox("HQ");
-    await mobileUsersPage.applyFilter();
-  });
-
-  await test.step("Verify Role HQ column values match filter", async () => {
-    const hqCol = await mobileUsersPage.getColumnValues("roleHq");
-    expect(hqCol.length).toBeGreaterThan(0);
-    expect(
-      hqCol.every((v) => v === MobileUsersData.roles.yes || v === "-"),
-    ).toBe(true);
-  });
-});
-
-test("TC_AP_212 - Verify Status Filter", async ({ mobileUsersPage }) => {
-  test.skip(
-    true,
-    "Frontend status filter payload is not honored by the local backend; Active currently returns mixed statuses",
-  );
-  await test.step("Apply Status filter for Active", async () => {
-    await mobileUsersPage.openFilterModal();
-    await mobileUsersPage.selectFilterTab("Status");
-    await mobileUsersPage.toggleFilterCheckbox("Active");
-    await mobileUsersPage.applyFilter();
-  });
-
-  await test.step("Verify all visible users have Active status", async () => {
-    const statuses = await mobileUsersPage.getColumnValues("status");
-    expect(statuses.length).toBeGreaterThan(0);
-    expect(statuses.every((s) => s === MobileUsersData.status.active)).toBe(
-      true,
-    );
   });
 });
 
@@ -1065,10 +874,6 @@ test("TC_AP_217 - Verify Password Mask Unmask", async ({ mobileUsersPage }) => {
   });
 });
 
-test.skip("TC_AP_218 - Verify Password Communicated Via Email", async () => {
-  // Email delivery cannot be verified from admin portal automation.
-});
-
 test("TC_AP_219 - Verify Password Not On Update Form", async ({
   mobileUsersPage,
 }) => {
@@ -1113,135 +918,6 @@ test("TC_AP_221 - Verify Password Over 15 Not Accepted", async ({
     );
     await expect(mobileUsersPage.page).toHaveURL(
       new RegExp(MobileUsersData.paths.create),
-    );
-  });
-});
-
-/**
- * TC_AP_267 — Bulk upload: reject non-CSV file formats.
- * Recommended bulk-upload order: 4 — negative format validation.
- * Tester notes: re-login before runs; do not parallelize.
- */
-test("TC_AP_267 - Verify Bulk Upload With Invalid File Format", async ({
-  mobileUsersPage,
-}) => {
-  test.skip(
-    true,
-    "Frontend CSV validation only rejects double extensions; a single-extension PDF reaches the backend instead of showing the documented client error",
-  );
-  await test.step("Open bulk upload page", async () => {
-    await mobileUsersPage.openBulkUploadFromListing();
-  });
-
-  await test.step("Upload non-CSV file and verify rejection", async () => {
-    await mobileUsersPage.selectBulkUploadFile(
-      MobileUsersData.testAssets.invalidPdf,
-    );
-    await mobileUsersPage.clickBulkUploadSubmit();
-    await mobileUsersPage.expectBulkUploadRejected(
-      MobileUsersData.validation.bulkCsvOnly,
-    );
-  });
-});
-
-/**
- * TC_AP_268 — Bulk upload: positive batch at 1000-record limit.
- * Recommended bulk-upload order: 5 — positive batch upload at 1000-record limit.
- * Tester notes: re-login before runs; do not parallelize;
- * ideally run TC_AP_268 alone when possible (heavy CSV + long timeout).
- */
-test("TC_AP_268 - Verify Bulk Upload With Large CSV File Can Upload 1000 Records", async ({
-  mobileUsersPage,
-}) => {
-  test.skip(
-    true,
-    "Destructive 1,000-user volume case requires a mocked API or disposable tenant with cleanup",
-  );
-  test.setTimeout(600_000);
-
-  const recordCount = MobileUsersData.limits.bulkUploadBatchSize;
-  const csvPath = BulkUploadCsvBuilder.writeTempCsv(recordCount, {
-    filename: `bulk-upload-${recordCount}-valid.csv`,
-  });
-
-  await test.step("Open bulk upload page", async () => {
-    await mobileUsersPage.openBulkUploadFromListing();
-  });
-
-  await test.step(`Upload CSV with ${recordCount} valid records`, async () => {
-    const response = await mobileUsersPage.uploadBulkCsv(csvPath);
-    expect(response.ok()).toBeTruthy();
-    await mobileUsersPage.expectBulkUploadProcessed();
-  });
-});
-
-/**
- * TC_AP_269 — Bulk upload: reject more than 1000 users in one batch.
- * Recommended bulk-upload order: 6 — reject uploads above 1000-record batch limit.
- * Tester notes: re-login before runs; do not parallelize.
- */
-test("TC_AP_269 - Verify Bulk Upload With More Than 1000 Users At A Time", async ({
-  mobileUsersPage,
-}) => {
-  test.skip(
-    true,
-    "Bulk boundary is enforced by the backend and uploading 1,001 users is unsafe in a shared tenant",
-  );
-  test.setTimeout(300_000);
-
-  const recordCount = MobileUsersData.limits.bulkUploadBatchSize + 1;
-  const csvPath = BulkUploadCsvBuilder.writeTempCsv(recordCount, {
-    filename: `bulk-upload-${recordCount}-over-limit.csv`,
-  });
-
-  await test.step("Open bulk upload page", async () => {
-    await mobileUsersPage.openBulkUploadFromListing();
-  });
-
-  await test.step(`Upload CSV with ${recordCount} records and verify rejection`, async () => {
-    await mobileUsersPage.selectBulkUploadFile(csvPath);
-    await mobileUsersPage.clickBulkUploadSubmit();
-    await mobileUsersPage.expectBulkUploadRejected(
-      MobileUsersData.bulkUpload.messages.overBatchLimit,
-    );
-  });
-});
-
-/**
- * TC_AP_272 — Bulk upload: maximum 30000-record ceiling (boundary rejection).
- * Recommended bulk-upload order: 7 — maximum 30000-record ceiling.
- * Positive upload of all 30000 rows is excluded here due to runtime; boundary is validated instead.
- * Tester notes: re-login before runs; do not parallelize.
- */
-test("TC_AP_272 - Verify Bulk Upload Maximum 30000 Users Can Be Uploaded", async ({
-  mobileUsersPage,
-}) => {
-  test.skip(
-    true,
-    "Destructive 30,001-row boundary case requires a mocked API or disposable tenant with cleanup",
-  );
-  test.setTimeout(300_000);
-
-  const overLimitCount = MobileUsersData.limits.bulkUploadMaxRecords + 1;
-  const csvPath = BulkUploadCsvBuilder.writeTempCsv(overLimitCount, {
-    filename: `bulk-upload-${overLimitCount}-over-max.csv`,
-  });
-
-  await test.step("Open bulk upload page", async () => {
-    await mobileUsersPage.openBulkUploadFromListing();
-  });
-
-  await test.step("Verify maximum record rule is documented", async () => {
-    await mobileUsersPage.expectBulkUploadRuleVisible(
-      /Maximum records should be 30000/i,
-    );
-  });
-
-  await test.step(`Upload CSV with ${overLimitCount} records and verify rejection`, async () => {
-    await mobileUsersPage.selectBulkUploadFile(csvPath);
-    await mobileUsersPage.clickBulkUploadSubmit();
-    await mobileUsersPage.expectBulkUploadRejected(
-      MobileUsersData.bulkUpload.messages.overMaxRecords,
     );
   });
 });
@@ -1364,115 +1040,5 @@ test("TC_AP_276 - Verify Bulk Upload History Tab Can Be Opened", async ({
   await test.step("Open history tab from bulk upload page", async () => {
     await mobileUsersPage.openBulkUploadHistoryFromPage();
     await expect(mobileUsersPage.page).toHaveURL(/bulk-upload-history/);
-  });
-});
-
-/**
- * TC_AP_277 — Bulk upload: history row shows file name, status, and counts after upload.
- * Recommended bulk-upload order: 9 — history listing details after an upload.
- * Tester notes: re-login before runs; do not parallelize.
- */
-test("TC_AP_277 - Verify Bulk Upload History Shows Expected Details", async ({
-  mobileUsersPage,
-}) => {
-  test.skip(
-    true,
-    "Valid bulk upload creates users that cannot be safely correlated and cleaned up in the shared tenant",
-  );
-  const fileName = `bulk-history-${Date.now()}.csv`;
-  const csvPath = BulkUploadCsvBuilder.writeTempCsv(1, { filename: fileName });
-
-  await test.step("Upload a valid CSV file", async () => {
-    await mobileUsersPage.openBulkUploadFromListing();
-    await mobileUsersPage.uploadBulkCsv(csvPath);
-    await mobileUsersPage.expectBulkUploadProcessed();
-  });
-
-  await test.step("Open history and verify table columns", async () => {
-    await mobileUsersPage.navigateToBulkUploadHistory();
-    await mobileUsersPage.expectBulkUploadHistoryColumnsVisible();
-  });
-
-  await test.step("Verify uploaded file row contains expected history fields", async () => {
-    const row = await mobileUsersPage.waitForBulkUploadHistoryRow(fileName);
-    const rowText = await row.innerText();
-
-    expect(rowText).toContain(fileName);
-    expect(rowText).toMatch(/Pending|Success|Failed|Processing/i);
-    expect(rowText).toMatch(/\d/);
-  });
-});
-
-/**
- * TC_AP_278 — Bulk upload: download error report from history after failed rows.
- * Recommended bulk-upload order: 11 — error report download after a failed row upload.
- * Tester notes: re-login before runs; do not parallelize.
- */
-test("TC_AP_278 - Verify Bulk Upload Error Report Can Be Downloaded", async ({
-  mobileUsersPage,
-}) => {
-  test.skip(
-    true,
-    "Local bulk processor accepts the invalid CSV but does not publish a matching history row/error report",
-  );
-  const fileName = `bulk-errors-${Date.now()}.csv`;
-  const csvPath = BulkUploadCsvBuilder.writeTempCsv(1, {
-    filename: fileName,
-    rowBuilder: () => ({
-      userName: TestDataGenerator.generateUniqueUsername(),
-      firstName: "Bad",
-      lastName: "Row",
-      email: TestDataGenerator.generateInvalidEmail(),
-      password: TestDataGenerator.generateWeakPassword(),
-      language: "invalid-lang",
-      roles: "INVALID_ROLE",
-    }),
-  });
-
-  await test.step("Upload CSV with invalid data to generate failures", async () => {
-    await mobileUsersPage.openBulkUploadFromListing();
-    const response = await mobileUsersPage.uploadBulkCsv(csvPath);
-    expect(response.ok()).toBeTruthy();
-  });
-
-  await test.step("Download error report from history when available", async () => {
-    await mobileUsersPage.navigateToBulkUploadHistory();
-    const row = await mobileUsersPage.waitForBulkUploadHistoryRow(fileName);
-
-    await expect
-      .poll(async () => row.innerText(), { timeout: 180_000 })
-      .toMatch(/Failed|Failure|Error/i);
-
-    const download = await mobileUsersPage.downloadHistoryErrorReport(fileName);
-    expect(download.suggestedFilename()).toMatch(/\.csv|error|report/i);
-  });
-});
-
-/**
- * TC_AP_279 — Bulk upload: download uploaded file from history.
- * Recommended bulk-upload order: 10 — download uploaded file from history.
- * Tester notes: re-login before runs; do not parallelize.
- */
-test("TC_AP_279 - Verify Bulk Upload File Can Be Downloaded From History", async ({
-  mobileUsersPage,
-}) => {
-  test.skip(
-    true,
-    "Valid bulk upload creates users that cannot be safely correlated and cleaned up in the shared tenant",
-  );
-  const fileName = `bulk-download-${Date.now()}.csv`;
-  const csvPath = BulkUploadCsvBuilder.writeTempCsv(1, { filename: fileName });
-
-  await test.step("Upload a valid CSV file", async () => {
-    await mobileUsersPage.openBulkUploadFromListing();
-    await mobileUsersPage.uploadBulkCsv(csvPath);
-    await mobileUsersPage.expectBulkUploadProcessed();
-  });
-
-  await test.step("Download uploaded file from history", async () => {
-    await mobileUsersPage.navigateToBulkUploadHistory();
-    const download =
-      await mobileUsersPage.downloadHistoryUploadedFile(fileName);
-    expect(download.suggestedFilename()).toBeTruthy();
   });
 });

@@ -1,4 +1,5 @@
 import { test as base, type BrowserContext, type Page } from '@playwright/test';
+import { loginData } from '../data/loginData';
 import { LoginPage } from '../pages/LoginPage';
 
 type LoginFixtures = {
@@ -14,6 +15,20 @@ export const test = base.extend<LoginFixtures, WorkerFixtures>({
   workerContext: [
     async ({ browser }, use) => {
       const context = await browser.newContext();
+      // Product default is Japanese; pin English before any login page load.
+      await context.addInitScript(
+        ({ key, value }) => {
+          try {
+            localStorage.setItem(key, value);
+          } catch {
+            // Ignore storage access errors on restricted documents.
+          }
+        },
+        {
+          key: loginData.languageStorageKey,
+          value: loginData.englishLanguageCode,
+        },
+      );
       await use(context);
       await context.close();
     },

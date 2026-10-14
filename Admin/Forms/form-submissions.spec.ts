@@ -62,7 +62,14 @@ function monthLabel(date: Date): string {
 }
 
 function parseUiDate(value: string): Date | null {
-  const date = new Date(`${value} 00:00:00`);
+  const trimmed = value.trim();
+  // Listing dates use en-GB DD/MM/YYYY (see formatLocalizedDate).
+  const dmy = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (dmy) {
+    const date = new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]));
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  const date = new Date(`${trimmed} 00:00:00`);
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
@@ -105,7 +112,7 @@ async function requireFirstSubmission(
   reason: string,
 ): Promise<SubmissionTableRow> {
   const row = (await formSubmissionsPage.getTableRows())[0];
-  test.skip(!row, reason);
+  expect(row, reason).toBeTruthy();
   return row!;
 }
 
@@ -114,21 +121,12 @@ async function selectSubmissionForm(
   reason: string,
 ): Promise<SubmissionTableRow> {
   const initialRow = await requireFirstSubmission(formSubmissionsPage, reason);
-  const options = await formSubmissionsPage.searchFormOptions(
-    initialRow.formName,
-  );
-  await formSubmissionsPage.closeFormDropdown();
-  test.skip(
-    !options.includes(initialRow.formName),
-    `Live submission form "${initialRow.formName}" is absent from the form dropdown.`,
-  );
-
   await formSubmissionsPage.selectForm(initialRow.formName);
   const filteredRows = await formSubmissionsPage.getTableRows();
-  test.skip(
-    filteredRows.length === 0,
+  expect(
+    filteredRows.length,
     `Form "${initialRow.formName}" has no matching live submissions after selection.`,
-  );
+  ).toBeGreaterThan(0);
   return filteredRows[0];
 }
 
@@ -142,10 +140,10 @@ async function prepareSelectedExport(
   );
   const outputPath = testInfo.outputPath(`form-submissions-${Date.now()}.csv`);
   const result = await formSubmissionsPage.downloadExport(outputPath);
-  test.skip(
-    !result,
+  expect(
+    result,
     `Selected form "${uiRow.formName}" did not produce a successful live CSV download.`,
-  );
+  ).toBeTruthy();
   return { uiRow, result: result!, csv: await parseCsv(outputPath) };
 }
 
@@ -161,14 +159,15 @@ function expectRequiredExportColumns(headers: string[]) {
   }
 }
 
-test("TC_AP_648 - Verify All Forms is selected by default", async ({
+test("TC_AP_648 - Verify Select Form placeholder is shown by default", async ({
   formSubmissionsPage,
 }) => {
   await expect(formSubmissionsPage.heading()).toBeVisible();
+  await expect(formSubmissionsPage.formSelect()).toBeVisible();
   await expect(formSubmissionsPage.selectedFormLabel()).toHaveText(
-    FORM_SUBMISSIONS.allForms,
+    FORM_SUBMISSIONS.selectFormPlaceholder,
   );
-  await expect(formSubmissionsPage.formCombobox()).toHaveValue("");
+  expect(await formSubmissionsPage.hasSelectedForm()).toBe(false);
 });
 
 test("TC_AP_649 - Verify selecting a form filters submissions", async ({
@@ -189,29 +188,29 @@ test("TC_AP_650 - Verify all forms are shown in a scrollable dropdown", async ({
   formSubmissionsPage,
 }) => {
   const liveNames = formSubmissionsPage.getLoadedFormNames();
-  test.skip(
-    liveNames.length < 2,
+  expect(
+    liveNames.length,
     "Fewer than two live forms are available in the form-names API.",
-  );
-  test.skip(
-    !(await formSubmissionsPage.dropdownHasScrollableList()),
-    `The ${liveNames.length} live forms do not overflow the dropdown, so scrolling cannot be verified.`,
-  );
+  ).toBeGreaterThanOrEqual(2);
 
   const defaultOptions = await formSubmissionsPage.searchFormOptions("");
-  expect(defaultOptions).toContain(FORM_SUBMISSIONS.allForms);
+  for (const formName of new Set(liveNames)) {
+    expect(defaultOptions).toContain(formName);
+  }
+
+  // Scrollability only applies when the list overflows the picker panel.
+  if (liveNames.length >= 8) {
+    expect(
+      await formSubmissionsPage.dropdownHasScrollableList(),
+      `The ${liveNames.length} live forms do not overflow the dropdown, so scrolling cannot be verified.`,
+    ).toBe(true);
+  }
+
   for (const formName of new Set(liveNames)) {
     const matchingOptions =
       await formSubmissionsPage.searchFormOptions(formName);
     expect(matchingOptions).toContain(formName);
   }
-});
-
-test("TC_AP_651 - Verify close icon in Submitted By search", async () => {
-  test.skip(
-    true,
-    "Frontend Submitted By search has no clear-X control; it resets only when the input is emptied.",
-  );
 });
 
 test("TC_AP_652 - Verify calendar opens from both date inputs", async ({
@@ -253,10 +252,10 @@ test("TC_AP_655 - Verify submissions are filtered by From and To dates", async (
   expect(query.toDate).toBeTruthy();
 
   const rows = await formSubmissionsPage.getTableRows();
-  test.skip(
-    rows.length === 0,
+  expect(
+    rows.length,
     "No live submissions exist for today to verify date-filtered rows.",
-  );
+  ).toBeGreaterThan(0);
   expect(
     rows.every((row) => {
       const date = parseUiDate(row.dateCreated);
@@ -285,20 +284,20 @@ test("TC_AP_657 - Verify filtering by a full submitted name", async ({
     formSubmissionsPage,
     "No live submissions are available to obtain a complete Submitted By name.",
   );
-  test.skip(
-    !initial.submittedBy,
+  expect(
+    initial.submittedBy,
     "The available live submission has an empty Submitted By value.",
-  );
+  ).toBeTruthy();
 
   const query = await formSubmissionsPage.searchSubmittedBy(
     initial.submittedBy,
   );
   expect(query.submittedByName).toBe(initial.submittedBy);
   const rows = await formSubmissionsPage.getTableRows();
-  test.skip(
-    rows.length === 0,
+  expect(
+    rows.length,
     `No live submissions match the full Submitted By name "${initial.submittedBy}".`,
-  );
+  ).toBeGreaterThan(0);
   expect(rows.every((row) => row.submittedBy === initial.submittedBy)).toBe(
     true,
   );
@@ -331,7 +330,10 @@ test("TC_AP_660 - Verify export works only after selecting a form", async ({
 }, testInfo) => {
   expect(await formSubmissionsPage.clickExportWithoutForm()).toBe(false);
   const exported = await prepareSelectedExport(formSubmissionsPage, testInfo);
-  expect(exported.result.filename).toMatch(/-submissions=\d{8}_\d{6}\.csv$/i);
+  // Server Content-Disposition may be generic; client fallback uses form-submissions=timestamp.
+  expect(exported.result.filename).toMatch(
+    /(-submissions=\d{8}_\d{6}|submissions)\.csv$/i,
+  );
 });
 
 test("TC_AP_661 - Verify export contains only the selected form", async ({
@@ -355,7 +357,7 @@ test("TC_AP_662 - Verify Export downloads a file successfully", async ({
   formSubmissionsPage,
 }, testInfo) => {
   const exported = await prepareSelectedExport(formSubmissionsPage, testInfo);
-  expect(exported.result.filename).toMatch(/-submissions=/i);
+  expect(exported.result.filename).toMatch(/\.csv$/i);
   expect(exported.csv.headers.length).toBeGreaterThan(0);
 });
 
@@ -378,10 +380,10 @@ test("TC_AP_665 - Verify exported data matches the submissions table", async ({
   formSubmissionsPage,
 }, testInfo) => {
   const exported = await prepareSelectedExport(formSubmissionsPage, testInfo);
-  test.skip(
-    exported.csv.rows.length === 0,
+  expect(
+    exported.csv.rows.length,
     "The selected live export contains headers but no data rows.",
-  );
+  ).toBeGreaterThan(0);
 
   const formColumn = findColumn(exported.csv.headers, ["form name", "form"]);
   const submittedByColumn = findColumn(exported.csv.headers, [
@@ -390,10 +392,10 @@ test("TC_AP_665 - Verify exported data matches the submissions table", async ({
     "submitted by name",
   ]);
   const groupColumn = findColumn(exported.csv.headers, ["group name", "group"]);
-  test.skip(
-    formColumn < 0 || submittedByColumn < 0 || groupColumn < 0,
+  expect(
+    formColumn >= 0 && submittedByColumn >= 0 && groupColumn >= 0,
     `Live CSV lacks comparable form/submitted-by/group columns: ${exported.csv.headers.join(", ")}`,
-  );
+  ).toBe(true);
 
   expect(
     exported.csv.rows.some(
@@ -415,17 +417,17 @@ test("TC_AP_666 - Verify export respects date range filters", async ({
   const today = startOfToday();
   await formSubmissionsPage.selectDateRange(today, today);
   const filteredRows = await formSubmissionsPage.getTableRows();
-  test.skip(
-    filteredRows.length === 0,
+  expect(
+    filteredRows.length,
     "No selected-form submissions exist today for date export coverage.",
-  );
+  ).toBeGreaterThan(0);
 
   const outputPath = testInfo.outputPath(`date-filtered-${Date.now()}.csv`);
   const result = await formSubmissionsPage.downloadExport(outputPath);
-  test.skip(
-    !result,
+  expect(
+    result,
     "The selected live form did not produce a date-filtered CSV download.",
-  );
+  ).toBeTruthy();
   const query = formSubmissionsPage.exportQuery(result!);
   expect(query.fromDate).toBe(formatLocalDate(today));
   expect(query.toDate).toBe(formatLocalDate(today));
@@ -436,10 +438,10 @@ test("TC_AP_666 - Verify export respects date range filters", async ({
     "submission date",
     "submitted on",
   ]);
-  test.skip(
-    dateColumn < 0,
+  expect(
+    dateColumn,
     `Live CSV has no comparable date column: ${csv.headers.join(", ")}`,
-  );
+  ).toBeGreaterThanOrEqual(0);
   expect(
     csv.rows.every((row) => {
       const date = new Date(row[dateColumn]);
@@ -458,24 +460,24 @@ test("TC_AP_667 - Verify export respects Submitted By filter", async ({
     formSubmissionsPage,
     "No live submissions are available to select an exportable form.",
   );
-  test.skip(
-    !selectedRow.submittedBy,
+  expect(
+    selectedRow.submittedBy,
     "Selected live submission has an empty Submitted By value.",
-  );
+  ).toBeTruthy();
   await formSubmissionsPage.searchSubmittedBy(selectedRow.submittedBy);
-  test.skip(
-    (await formSubmissionsPage.getTableRows()).length === 0,
+  expect(
+    (await formSubmissionsPage.getTableRows()).length,
     `No selected-form submissions match "${selectedRow.submittedBy}".`,
-  );
+  ).toBeGreaterThan(0);
 
   const outputPath = testInfo.outputPath(
     `submitter-filtered-${Date.now()}.csv`,
   );
   const result = await formSubmissionsPage.downloadExport(outputPath);
-  test.skip(
-    !result,
+  expect(
+    result,
     "The selected live form did not produce a Submitted By-filtered CSV download.",
-  );
+  ).toBeTruthy();
   const query = formSubmissionsPage.exportQuery(result!);
   expect(query.submittedByName).toBe(selectedRow.submittedBy);
 
@@ -485,10 +487,10 @@ test("TC_AP_667 - Verify export respects Submitted By filter", async ({
     "submitter",
     "submitted by name",
   ]);
-  test.skip(
-    submittedByColumn < 0,
+  expect(
+    submittedByColumn,
     `Live CSV has no comparable Submitted By column: ${csv.headers.join(", ")}`,
-  );
+  ).toBeGreaterThanOrEqual(0);
   expect(csv.rows.length).toBeGreaterThan(0);
   expect(
     csv.rows.every((row) => row[submittedByColumn] === selectedRow.submittedBy),

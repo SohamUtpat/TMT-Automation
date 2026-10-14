@@ -81,11 +81,11 @@ export class FormBuilderPage {
 
   async openFromFormsList() {
     await expect(
-      this.page.getByRole("button", { name: /form builder/i }),
+      this.page.getByRole("button", { name: /create form/i }),
     ).toBeVisible({
       timeout: 30_000,
     });
-    await this.page.getByRole("button", { name: /form builder/i }).click();
+    await this.page.getByRole("button", { name: /create form/i }).click();
     await this.expectBuilderLoaded();
   }
 
@@ -246,8 +246,14 @@ export class FormBuilderPage {
   previewFileInput = (label: string) =>
     this.previewField(label).locator('input[type="file"]');
 
+  /** Visible Ant Upload trigger in the builder preview (native file input stays hidden). */
+  previewUploadButton = (label: string) =>
+    this.previewField(label).getByRole("button", {
+      name: FormsData.builder.labels.browseFile,
+    });
+
   previewDateInput = (label: string) =>
-    this.previewField(label).locator('input[type="date"]');
+    this.previewField(label).locator(".ant-picker input").first();
 
   previewTimeInput = (label: string) =>
     this.previewField(label).locator('input[type="time"]');
@@ -347,10 +353,9 @@ export class FormBuilderPage {
     this.elementModal().locator(".ant-upload button").nth(index);
 
   modalImagePreviews = () =>
-    this.elementModal().getByRole("img", {
-      name: FormsData.builder.labels.imagePreviewAlt,
-      exact: true,
-    });
+    this.elementModal().locator(
+      'img[src^="blob:"], img[src^="http"], img[src^="https"]',
+    );
 
   sliderMinimumInput = () =>
     this.elementModal().getByRole("spinbutton", {
@@ -499,7 +504,10 @@ export class FormBuilderPage {
     }
     await this.optionLabelInputs().nth(index).fill(option.label);
     if (option.file) {
-      await this.imageUploadInputs().nth(index).setInputFiles(option.file);
+      const chooserPromise = this.page.waitForEvent("filechooser");
+      await this.imageUploadButton(index).click();
+      const chooser = await chooserPromise;
+      await chooser.setFiles(option.file);
     }
   }
 

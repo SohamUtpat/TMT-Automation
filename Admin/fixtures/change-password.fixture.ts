@@ -3,6 +3,7 @@ import path from 'path';
 import { ChangePasswordPage, type TestAdminCredentials } from '../pages/ChangePasswordPage';
 import { LoginPage } from '../pages/LoginPage';
 import { loginData } from '../data/loginData';
+import { adminPageTitle } from '../utils/adminPageTitle';
 
 const authFile = path.join(__dirname, '../../playwright/.auth/admin.json');
 const emptyStorageState = { cookies: [], origins: [] } as const;
@@ -23,8 +24,16 @@ async function loginAsTestUser(page: Page, credentials: TestAdminCredentials) {
   await expect(page.locator('#username')).toBeVisible({ timeout: 30_000 });
   await login.login(credentials.userName, credentials.password);
 
+  if (await page.locator('#username').isVisible().catch(() => false)) {
+    const loginError = login.lastErrorMessage || '(no toast captured)';
+    throw new Error(
+      `Dedicated admin login failed for ${credentials.userName}. ` +
+        `outcome=${login.lastLoginOutcome} status=${login.lastLoginStatus ?? 'n/a'} message=${loginError}`,
+    );
+  }
+
   await page.goto('/dashboard', { waitUntil: 'commit', timeout: 120_000 }).catch(() => undefined);
-  await expect(page.locator('#pageTitle')).toBeVisible({ timeout: 60_000 });
+  await expect(adminPageTitle(page)).toBeVisible({ timeout: 60_000 });
 }
 
 type ChangePasswordFixtures = {
@@ -47,12 +56,6 @@ export const test = base.extend<ChangePasswordFixtures, WorkerFixtures>({
       const setupPage = new ChangePasswordPage(adminPage);
       await adminPage.goto('/dashboard', { waitUntil: 'commit', timeout: 120_000 });
       const credentials = await setupPage.createDedicatedTestAdminUser();
-
-      // Confirm the dedicated user can log in before any spec runs.
-      const verifyContext = await browser.newContext({ storageState: emptyStorageState });
-      const verifyPage = await verifyContext.newPage();
-      await loginAsTestUser(verifyPage, credentials);
-      await verifyContext.close();
 
       await adminContext.close();
       await use({ ...credentials });

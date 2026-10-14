@@ -1,6 +1,7 @@
 import { expect, type Page } from '@playwright/test';
 import { LoginPage } from '../pages/LoginPage';
 import { loginData } from '../data/loginData';
+import { adminPageTitle } from './adminPageTitle';
 
 export type LoginCredentials = {
   username: string;
@@ -9,11 +10,11 @@ export type LoginCredentials = {
 
 export async function isOnLoginPage(page: Page): Promise<boolean> {
   const usernameVisible = await page.locator('#username').isVisible().catch(() => false);
-  const loggedIn = await page.locator('#pageTitle').isVisible().catch(() => false);
+  const loggedIn = await adminPageTitle(page).isVisible().catch(() => false);
   return usernameVisible && !loggedIn;
 }
 
-/** Stale JWT can leave an authenticated route with an empty shell (no login form, no #pageTitle). */
+/** Stale JWT can leave an authenticated route with an empty shell (no login form, no page title). */
 export async function isBrokenAppShell(page: Page): Promise<boolean> {
   const url = page.url();
   if (!url || url === 'about:blank' || url.startsWith('chrome-error://')) {
@@ -25,7 +26,7 @@ export async function isBrokenAppShell(page: Page): Promise<boolean> {
     return false;
   }
 
-  if (await page.locator('#pageTitle').isVisible().catch(() => false)) {
+  if (await adminPageTitle(page).isVisible().catch(() => false)) {
     return false;
   }
 
@@ -57,7 +58,7 @@ async function waitForAppShell(page: Page) {
     .catch(() => undefined);
   await bundle;
   await page
-    .locator('#pageTitle, #username')
+    .locator('.listing-page-heading h1, #pageTitle, #username')
     .first()
     .waitFor({ state: 'visible', timeout: 300_000 })
     .catch(() => undefined);
@@ -68,7 +69,7 @@ async function performLogin(page: Page, credentials: LoginCredentials) {
   const login = new LoginPage(page);
   await login.navigate();
   await login.login(credentials.username, credentials.password);
-  await expect(page.locator('#pageTitle')).toBeVisible({ timeout: 300_000 });
+  await expect(adminPageTitle(page)).toBeVisible({ timeout: 300_000 });
 }
 
 /** Re-login when storageState token was rejected and the app redirected to login. */
@@ -91,7 +92,7 @@ export async function ensureAuthenticated(
   await page.goto('/dashboard', { waitUntil: 'commit', timeout: 300_000 });
   await waitForAppShell(page);
 
-  if (await page.locator('#pageTitle').isVisible().catch(() => false)) {
+  if (await adminPageTitle(page).isVisible().catch(() => false)) {
     return;
   }
 

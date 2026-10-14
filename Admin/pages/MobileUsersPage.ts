@@ -3,6 +3,7 @@ import path from "path";
 import { getApiBaseUrl } from "../config/appConfig";
 import { MobileUsersData } from "../data/MobileUsersData";
 import type { ApiGroup } from "./GroupsPage";
+import { adminPageTitle } from "../utils/adminPageTitle";
 import {
   ensureAuthenticated as restoreSession,
   isOnLoginPage,
@@ -126,8 +127,7 @@ export class MobileUsersPage {
     }
 
     const [title, createVisible] = await Promise.all([
-      this.page
-        .locator("#pageTitle")
+      adminPageTitle(this.page)
         .textContent()
         .catch(() => ""),
       this.createUserLink()
@@ -279,7 +279,7 @@ export class MobileUsersPage {
   }
 
   async expectBulkUploadHistoryLoaded() {
-    await expect(this.page.locator("#pageTitle")).toHaveText(
+    await expect(this.page.locator(".header-title")).toHaveText(
       MobileUsersData.bulkUpload.historyPageTitle,
       {
         timeout: 60_000,
@@ -314,7 +314,7 @@ export class MobileUsersPage {
       }
     }
 
-    await expect(this.page.locator("#pageTitle")).toHaveText(
+    await expect(adminPageTitle(this.page)).toHaveText(
       MobileUsersData.pageTitle,
       {
         timeout: 90_000,
@@ -411,12 +411,10 @@ export class MobileUsersPage {
   deleteIcon = (userName: string) =>
     this.userRow(userName).locator(".delete-icon");
 
-  sortHeader = (column: string) => {
-    const escaped = column.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    return this.table().getByRole("columnheader", {
-      name: new RegExp(`^${escaped}(?:\\s+caret-(?:up|down))*$`, "i"),
+  sortHeader = (column: string) =>
+    this.page.getByRole("columnheader").filter({
+      has: this.page.getByText(column, { exact: true }),
     });
-  };
 
   nextPageButton = () => this.pagination().locator(".ant-pagination-next");
 
@@ -466,7 +464,7 @@ export class MobileUsersPage {
   fieldError = (text: string | RegExp) =>
     this.page
       .locator(
-        '[class*="textInput-module__info"], [class*="info"].error, .mobile-text-labels .error',
+        '[class*="textInput-module__info"], [class*="info"].error, .mobile-text-labels .error, .phone-input-error-text',
       )
       .filter({
         hasText: text,
@@ -982,7 +980,7 @@ export class MobileUsersPage {
       await formCard.click({ position: { x: 8, y: 8 } });
       return;
     }
-    await this.page.locator("#pageTitle").click();
+    await adminPageTitle(this.page).click();
   }
 
   async fillTextField(input: Locator, value: string) {
@@ -1397,12 +1395,7 @@ export class MobileUsersPage {
   }
 
   async expectColumnHeaderVisible(header: string) {
-    const escaped = header.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    await expect(
-      this.table().getByRole("columnheader", {
-        name: new RegExp(`^${escaped}(?:\\s+caret-(?:up|down))*$`, "i"),
-      }),
-    ).toBeVisible();
+    await expect(this.sortHeader(header)).toBeVisible();
   }
 
   async expectHqGroupAssigned() {
